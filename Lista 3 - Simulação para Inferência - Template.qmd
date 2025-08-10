@@ -1,0 +1,401 @@
+---
+title: "PPCA0026 - Tarefa de Casa: Simulação, Poder e Decisão"
+subtitle: "Aplicando os Conceitos da Semana 4"
+author: "Denard Costa Soares"
+date: "2025-07-04"
+format:
+  html:
+    embed-resources: true
+    toc: true
+    toc-depth: 3
+    theme: cosmo
+    code-fold: show
+    code-tools: true
+---
+
+## Introdução
+
+Nesta tarefa, você aplicará os conceitos de simulação para entender as propriedades de testes estatísticos, implementará um teste não-paramétrico do zero, e aplicará um framework de teoria da decisão para analisar um problema de classificação.
+
+**Instruções Gerais:**
+
+* Este arquivo serve como seu template de resposta. Preencha as seções marcadas com seu código R, as saídas geradas, e suas análises textuais.
+* **Entrega:** Envie dois arquivos: este `.qmd` completo e o arquivo `.html` auto-contido resultante.
+```{r libs}
+library(ggplot2)
+library(caret)
+```
+---
+
+## Problema 1: O Poder de um Teste - Um Estudo de Simulação
+
+### Parte A: Poder vs. Tamanho do Efeito
+
+```{r prob1a_power_function}
+calcular_poder <- function(n, d, sigma, num_sim = 1000, alpha = 0.05) {
+  # Inicializa o contador de rejeições da hipótese nula
+  rejeicoes <- 0
+  
+  for (i in 1:num_sim) {
+    # Gera dados sob a hipótese alternativa (média = d * sigma, desvio padrão = sigma)
+    dados <- rnorm(n, mean = d * sigma, sd = sigma)
+    
+    # Realiza um teste t de uma amostra (H0: média = 0)
+    # Assumimos uma hipótese alternativa bilateral (two.sided) por padrão para o poder geral
+    teste_t <- t.test(dados, mu = 0, alternative = "two.sided", conf.level = 1 - alpha)
+    
+    # Verifica se a hipótese nula foi rejeitada
+    if (teste_t$p.value < alpha) {
+      rejeicoes <- rejeicoes + 1
+    }
+  }
+  
+  # Calcula o poder como a proporção de rejeições
+  poder <- rejeicoes / num_sim
+  return(poder)
+}
+```
+
+```{r prob1a_run_and_plot}
+# 2. Defina os parâmetros e calcule o poder para cada tamanho de efeito
+n_fixo <- 30
+sigma_fixo <- 1
+efeitos_d <- seq(0, 2, by = 0.1)
+
+# Calcule o poder para cada tamanho de efeito
+poderes_efeito <- sapply(efeitos_d, function(d) {
+  calcular_poder(n = n_fixo, d = d, sigma = sigma_fixo)
+})
+
+# Crie um data frame para o gráfico
+df_poder_efeito <- data.frame(
+  Tamanho_do_Efeito = efeitos_d,
+  Poder = poderes_efeito
+)
+
+# 3. Crie o gráfico de Poder vs. Tamanho do Efeito
+ggplot(df_poder_efeito, aes(x = Tamanho_do_Efeito, y = Poder)) +
+  geom_line(color = "blue") +
+  geom_point(color = "red") +
+  labs(
+    title = "Poder do Teste vs. Tamanho do Efeito (d)",
+    x = "Tamanho do Efeito (d)",
+    y = "Poder do Teste"
+  ) +
+  theme_minimal() +
+  geom_hline(yintercept = 0.8, linetype = "dashed", color = "gray") +
+  annotate("text", x = 1.8, y = 0.82, label = "Poder Desejado (0.8)", vjust = -0.5, hjust = 1)
+```
+
+**Análise da Parte A:**
+
+o gráfico ilustra a relação direta entre o poder de um teste e o tamanho do efeito que se deseja detectar, dado um tamanho de amostra e um nível de significância fixos.
+
+Poder em d=0: Quando o tamanho do efeito (d) é 0, o poder do teste é aproximadamente 0.05. Este é exatamente o nível de significância (α) que foi definido no teste. Isso é esperado, pois quando a hipótese nula é verdadeira (média populacional é zero, d=0), o poder do teste representa a probabilidade de cometer um erro Tipo I (rejeitar a H0 quando ela é verdadeira), que é por definição α.
+
+Aumento do poder com o tamanho do efeito: À medida que d aumenta, o poder do teste também aumenta. Para valores pequenos de d (por exemplo, 0.1,0.2), o poder ainda é baixo, indicando que o teste tem dificuldade em detectar efeitos muito pequenos com o tamanho de amostra fixo (n=30).
+
+Ponto de poder desejado (0.8): A linha pontilhada horizontal em poder = 0.8 é uma referência comum para um poder "adequado" na prática.
+Observando o gráfico, o poder do teste atinge ou ultrapassa 0.8 (80%) quando o tamanho do efeito (d) está em torno de 0.5 a 0.6. Isso significa que, com uma amostra de 30 observações e um desvio padrão de 1, para detectar um efeito de 0.5 a 0.6 desvios padrão com 80% de certeza, este teste é eficaz.
+Assintótico para 1: Conforme o tamanho do efeito (d) continua a aumentar (indo em direção a 2.0), o poder do teste se aproxima de 1.0 (ou 100%). Isso é lógico: quanto maior a verdadeira diferença entre a média populacional e zero, mais fácil é para o teste detectá-la, levando a uma probabilidade muito alta de rejeitar corretamente a hipótese nula.
+
+O gráfico demonstra que, para um tamanho de amostra e nível de significância fixos, a capacidade do teste de detectar um efeito verdadeiro (seu poder) é diretamente proporcional à magnitude desse efeito. Efeitos maiores são mais fáceis de detectar. Se deseja-se um efeito de um determinado tamanho, pode-se usar gráficos como este (ou cálculos de poder) para determinar o tamanho de amostra necessário para atingir um certo poder desejado. Para efeitos muito pequenos, um tamanho de amostra de n=30 pode ser insuficiente para atingir um poder alto. Isso ressalta a importância de considerar o tamanho do efeito esperado ao planejar experimentos.
+
+### Parte B: Poder vs. Tamanho da Amostra
+
+```{r prob1b_run_and_plot}
+# 1. Defina os parâmetros
+d_fixo <- 0.5
+sigma_fixo <- 1
+amostras_n <- seq(10, 200, by = 10)
+
+# Calcule os poderes para cada tamanho de amostra
+poderes_amostra <- sapply(amostras_n, function(n) {
+  calcular_poder(n = n, d = d_fixo, sigma = sigma_fixo)
+})
+
+# Crie um data frame para o gráfico
+df_poder_amostra <- data.frame(
+  Tamanho_da_Amostra = amostras_n,
+  Poder = poderes_amostra
+)
+
+# 2. Crie o gráfico de Poder vs. Tamanho da Amostra
+ggplot(df_poder_amostra, aes(x = Tamanho_da_Amostra, y = Poder)) +
+  geom_line(color = "darkgreen") +
+  geom_point(color = "purple") +
+  labs(
+    title = "Poder do Teste vs. Tamanho da Amostra (n)",
+    x = "Tamanho da Amostra (n)",
+    y = "Poder do Teste"
+  ) +
+  theme_minimal() +
+  geom_hline(yintercept = 0.8, linetype = "dashed", color = "gray") +
+  annotate("text", x = 180, y = 0.82, label = "Poder Desejado (0.8)", vjust = -0.5, hjust = 1)
+
+```
+
+**Análise da Parte B:**
+
+Para um tamanho de efeito e nível de significância fixos, aumentar o tamanho da amostra é a principal forma de aumentar o poder de um teste, permitindo uma maior confiança na detecção de efeitos verdadeiros. Destaca-se no gráfico que o poder do teste aumenta consistentemente à medida que o tamanho da amostra (n) cresce. Para n=10, o poder é bastante baixo (apenas cerca de 0.2, ou 20%). Isso significa que com uma amostra muito pequena, mesmo com um efeito real fixo (d=0.5), o teste tem pouca chance de detectá-lo. À medida que n aumenta, o poder cresce de forma não linear, inicialmente mais rápido e depois mais lentamente. Portanto, mostras maiores fornecem mais informações sobre a população, reduzindo o erro amostral e tornando mais fácil detectar efeitos reais.
+Considerando a linha pontilhada horizontal em poder = 0.8 (80%), o gráfico indica que, para o efeito fixo de d=0.5 e α=0.05, é necessário um tamanho de amostra de aproximadamente n=30 a n=40 para que o poder do teste atinja ou exceda 80%. Se a pesquisa visa um poder de 80% para detectar um efeito de 0.5 desvios padrão, o tamanho da amostra deve ser pelo menos nesse intervalo. 
+Embora o poder continue a aumentar com o tamanho da amostra, a taxa de aumento diminui. Para n muito grandes (por exemplo, acima de 150), o poder se aproxima de 1.0 (100%), mas os ganhos em poder para cada aumento adicional de n tornam-se marginais. Isso sugere que, a partir de certo ponto, aumentar ainda mais o tamanho da amostra pode não ser eficiente em termos de custo-benefício se o poder já estiver muito alto. Portanto, obter amostras extremamente grandes para atingir um poder de 99% pode ser desnecessário e caro se um poder de 80% ou 90% já for considerado suficiente.
+
+
+---
+
+## Problema 2: Teste de Permutação para Correlação
+
+### Parte A: Teste Clássico
+
+```{r prob2a_classical_test}
+# Gerar um conjunto de dados de exemplo para o Problema 2
+set.seed(123)
+n_data_p2 <- 100
+dados_p2 <- data.frame(
+  x = rnorm(n_data_p2, mean = 10, sd = 2),
+  y = 0.5 * rnorm(n_data_p2, mean = 10, sd = 2) + rnorm(n_data_p2, mean = 0, sd = 0.5)
+)
+
+# Calcula a correlação de Pearson entre x e y
+correlacao_classica <- cor.test(dados_p2$x, dados_p2$y, method = "pearson")
+
+# Exibe os resultados do teste clássico
+print(correlacao_classica)
+
+```
+
+**Análise da Parte A:**
+
+Os valores indicam que não há uma correlação linear estatisticamente significativa entre as variáveis x e y neste conjunto de dados, de acordo com o teste clássico de Pearson.
+Não foi rejeitada a hipótese nula.O p-valor de 0.3212 é significativamente maior que α=0.05. Isso significa que não há evidência estatística suficiente para concluir que existe uma associação linear estatisticamente significativa entre as variáveis x e y na população, dado o nível de significância de 0.05.
+A correlação observada na amostra (-0.1002) é muito fraca e, como o intervalo de confiança inclui zero, não podemos descartar a possibilidade de que a verdadeira correlação populacional seja nula.
+
+### Parte B e C: Teste de Permutação e Análise
+
+```{r prob2c_solution}
+# 1. Calcule a correlação observada
+correlacao_observada <- cor(dados_p2$x, dados_p2$y, method = "pearson")
+print(paste("Correlação Observada:", correlacao_observada))
+
+# 2. Implemente o loop de permutação
+num_permutacoes <- 10000
+correlacoes_permutacao <- numeric(num_permutacoes)
+
+for (i in 1:num_permutacoes) {
+  # Permuta a variável 'y'
+  y_permutado <- sample(dados_p2$y)
+  
+  # Calcula a correlação para a amostra permutada
+  correlacoes_permutacao[i] <- cor(dados_p2$x, y_permutado, method = "pearson")
+}
+
+# 3. Visualize a distribuição nula e calcule o p-valor
+# Crie um data frame com as correlações permutadas
+df_permutacao <- data.frame(Correlacao = correlacoes_permutacao)
+
+# Plote o histograma da distribuição nula
+ggplot(df_permutacao, aes(x = Correlacao)) +
+  geom_histogram(binwidth = 0.02, fill = "lightblue", color = "black") +
+  geom_vline(xintercept = correlacao_observada, color = "red", linetype = "dashed", linewidth = 1) +
+  labs(
+    title = "Distribuição Nula da Correlação de Pearson (Teste de Permutação)",
+    x = "Correlação",
+    y = "Frequência"
+  ) +
+  theme_minimal()
+
+# Calcule o p-valor
+# Para um teste bilateral (two-sided), considera-se valores tão extremos quanto ou mais extremos
+p_valor <- (sum(abs(correlacoes_permutacao) >= abs(correlacao_observada)) + 1) / (num_permutacoes + 1)
+print(paste("P-valor (Teste de Permutação):", p_valor))
+```
+
+**Análise da Parte C:**
+
+Tanto o teste clássico de Pearson anterior quanto o teste de permutação para correlação concordam que não há uma relação linear estatisticamente significativa entre as variáveis x e y neste conjunto de dados, dada a pequena magnitude da correlação observada e a sua alta probabilidade de ocorrência sob a hipótese de aleatoriedade.
+A correlação observada nos dados originais é aproximadamente -0.1002. Isso indica uma correlação negativa muito fraca, similar ao que foi encontrado no teste paramétrico clássico. O histograma mostra a distribuição das 10.000 correlações geradas sob a hipótese nula (onde não há correlação real entre as variáveis).
+A forma da distribuição é aproximadamente simétrica e centrada em torno de zero (como esperado, já que sob a H0 a correlação é zero). A maioria das correlações permutadas está muito próxima de zero, variando em uma faixa estreita (e.g., de -0.2 a 0.2).
+A linha vermelha tracejada, que representa a "Correlação Observada" de -0.1002, está localizada bem dentro da porção central da distribuição nula. Isso visualmente sugere que a correlação observada não é um valor incomum se a hipótese nula fosse verdadeira. Ou seja, é fácil obter uma correlação de -0.1002 por puro acaso se não houver correlação real, ou seja, a correlação fraca observada não é considerada estatisticamente significativa.
+O p-valor calculado é 0.318568143185681 (aproximadamente 0.3186). Um p-valor de 0.3186 é significativamente maior que o nível de significância comumente usado de α=0.05, e portanto, não há evidência estatística suficiente para rejeitar a hipótese nula.
+Vantagem do Teste de Permutação: O teste de permutação oferece uma validação robusta para a conclusão do teste paramétrico, especialmente útil quando as suposições de normalidade ou outras condições para testes paramétricos não podem ser garantidas. Neste caso, embora os dados simulados pudessem atender às suposições, o método de permutação oferece uma confirmação da conclusão sem depender dessas suposições.
+---
+
+## Problema 3: Análise de Sensibilidade e Decisões Ótimas
+
+### Parte A: Análise de Sensibilidade Teórica
+
+```{r prob3a_sensitivity_analysis}
+# Cenário: C_I = 1,000,000; C_II = 5,000,000
+# Você precisará da sua função `calcular_poder` do Problema 1.
+
+# Definição da função calcular_poder (reutilizada e adaptada do Problema 1)
+# Esta função calcula o poder de um teste t de uma amostra.
+calcular_poder <- function(n, d, sigma, num_sim = 1000, alpha = 0.05) {
+  rejeicoes <- 0
+  for (i in 1:num_sim) {
+    dados <- rnorm(n, mean = d * sigma, sd = sigma)
+    teste_t <- t.test(dados, mu = 0, alternative = "two.sided", conf.level = 1 - alpha)
+    if (teste_t$p.value < alpha) {
+      rejeicoes <- rejeicoes + 1
+    }
+  }
+  poder <- rejeicoes / num_sim
+  return(poder)
+}
+
+# Definir os custos dos erros
+CI <- 1000000 # Custo de um Erro Tipo I (Falso Positivo)
+CII <- 5000000 # Custo de um Erro Tipo II (Falso Negativo)
+
+# Parâmetros fixos da simulação
+n_fixo <- 60 # Tamanho da amostra
+sigma_fixo <- 1 # Desvio padrão
+
+# Cenários de tamanho de efeito
+efeitos_d <- c(0.2, 0.5, 1.0) # Pequeno, Médio, Grande
+
+# Sequência de níveis de significância (alpha) para testar
+# Foi usado um intervalo razoável para alpha, pois alpha também representa a taxa de FP
+alphas_para_otimizacao <- seq(0.001, 0.2, by = 0.001) # Testar alphas de 0.1% a 20%
+
+# Data frame para armazenar os resultados
+resultados_otimizacao <- data.frame(
+  Tamanho_do_Efeito = numeric(),
+  Alpha_Otimo = numeric(),
+  Custo_Esperado_Minimo = numeric()
+)
+
+# Loop para cada tamanho de efeito
+for (d_val in efeitos_d) {
+  custos_esperados <- numeric(length(alphas_para_otimizacao))
+  
+  for (i in seq_along(alphas_para_otimizacao)) {
+    alpha_current <- alphas_para_otimizacao[i]
+    
+    # Calcular o poder para o alpha atual
+    poder_calculado <- calcular_poder(n = n_fixo, d = d_val, sigma = sigma_fixo, alpha = alpha_current)
+    
+    # Calcular beta (erro Tipo II)
+    beta_calculado <- 1 - poder_calculado
+    
+    # Calcular o risco esperado (custo esperado)
+    custos_esperados[i] <- alpha_current * CI + beta_calculado * CII
+  }
+  
+  # Encontrar o alpha que minimiza o custo esperado
+  idx_min_custo <- which.min(custos_esperados)
+  alpha_otimo <- alphas_para_otimizacao[idx_min_custo]
+  custo_minimo <- custos_esperados[idx_min_custo]
+  
+  # Adicionar os resultados ao data frame
+  resultados_otimizacao <- rbind(resultados_otimizacao, data.frame(
+    Tamanho_do_Efeito = d_val,
+    Alpha_Otimo = alpha_otimo,
+    Custo_Esperado_Minimo = custo_minimo
+  ))
+}
+
+print("### Resultados da Análise de Sensibilidade Teórica (Parte A)")
+print(resultados_otimizacao)
+```
+
+**Análise da Parte A:**
+
+A análise de sensibilidade teórica demonstra que a escolha do nível de significância (α) não deve ser arbitrária. Em um contexto de decisão, ela deve ser otimizada considerando os custos assimétricos dos erros Tipo I e Tipo II e o verdadeiro tamanho do efeito que se espera detectar. Quando o custo de um falso negativo é muito alto (como no C1I>C1), há uma tendência a aumentar o α (tornar o teste menos rigoroso) para reduzir β, especialmente para efeitos mais difíceis de detectar. Inversamente, para efeitos facilmente detectáveis, um α muito baixo é ideal, garantindo quase certeza antes de aprovar.
+
+### Parte B: Análise de Sensibilidade em um Contexto de Machine Learning
+
+```{r prob3b_setup}
+# 1. Carregue e Divida os Dados
+library(ISLR2)
+data(Default)
+
+# Converter 'default' e 'student' para fatores
+Default$default <- as.factor(Default$default)
+Default$student <- as.factor(Default$student)
+
+set.seed(2024) # Para reprodutibilidade
+indice_treino <- createDataPartition(Default$default, p = 0.7, list = FALSE)
+treino <- Default[indice_treino, ]
+validacao <- Default[-indice_treino, ]
+
+# Treinar o modelo de regressão logística
+modelo_logistico <- glm(default ~ student + balance + income, data = treino, family = "binomial")
+
+# 2. Identifique Subgrupos no conjunto de validação
+validacao_estudantes <- subset(validacao, student == "Yes")
+validacao_nao_estudantes <- subset(validacao, student == "No")
+
+# Função para calcular o custo total a partir da matriz de confusão
+# C_FP: Custo de Falso Positivo (Erro Tipo I)
+# C_FN: Custo de Falso Negativo (Erro Tipo II)
+calcular_custo_total <- function(matriz_confusao, C_FP, C_FN) {
+  # As classes devem ser "No" e "Yes" para Default, então:
+  # Observado No, Previsto Yes = FP (matriz_confusao[1, 2])
+  # Observado Yes, Previsto No = FN (matriz_confusao[2, 1])
+  
+  FP <- matriz_confusao[1, 2] # Falso Positivo: Observado "No", Previsto "Yes"
+  FN <- matriz_confusao[2, 1] # Falso Negativo: Observado "Yes", Previsto "No"
+  
+  custo_total <- (FP * C_FP) + (FN * C_FN)
+  return(custo_total)
+}
+
+# Definir os custos conforme o cenário: Custo FN é 5x Custo FP
+C_FP_ML <- 1000 # Custo arbitrário para Falso Positivo (ex: custo de marketing para cliente que não inadimpli)
+C_FN_ML <- 5 * C_FP_ML # Custo para Falso Negativo (ex: perda de dinheiro por inadimplência)
+
+print(paste("Custo Falso Positivo (C_FP_ML):", C_FP_ML))
+print(paste("Custo Falso Negativo (C_FN_ML):", C_FN_ML))
+
+# 3. Avalie o Desempenho Geral (Limiar padrão = 0.5)
+prob_geral <- predict(modelo_logistico, newdata = validacao, type = "response")
+pred_geral <- ifelse(prob_geral > 0.5, "Yes", "No")
+pred_geral <- factor(pred_geral, levels = levels(Default$default)) # Garantir níveis corretos
+
+cm_geral <- table(Observado = validacao$default, Previsto = pred_geral)
+print("### Matriz de Confusão Geral (Limiar 0.5):")
+print(cm_geral)
+
+custo_geral <- calcular_custo_total(cm_geral, C_FP_ML, C_FN_ML)
+print(paste("Custo Total Geral (Limiar 0.5):", custo_geral))
+print(paste("Custo Médio por Pessoa Geral (Limiar 0.5):", custo_geral / nrow(validacao)))
+
+# 4. Realize a Análise de Sensibilidade (por subgrupo, Limiar padrão = 0.5)
+
+# Estudantes
+prob_estudantes <- predict(modelo_logistico, newdata = validacao_estudantes, type = "response")
+pred_estudantes <- ifelse(prob_estudantes > 0.5, "Yes", "No")
+pred_estudantes <- factor(pred_estudantes, levels = levels(Default$default))
+
+cm_estudantes <- table(Observado = validacao_estudantes$default, Previsto = pred_estudantes)
+print("### Matriz de Confusão para Estudantes (Limiar 0.5):")
+print(cm_estudantes)
+
+custo_estudantes <- calcular_custo_total(cm_estudantes, C_FP_ML, C_FN_ML)
+print(paste("Custo Total para Estudantes (Limiar 0.5):", custo_estudantes))
+print(paste("Custo Médio por Pessoa para Estudantes (Limiar 0.5):", custo_estudantes / nrow(validacao_estudantes)))
+
+# Não-Estudantes
+prob_nao_estudantes <- predict(modelo_logistico, newdata = validacao_nao_estudantes, type = "response")
+pred_nao_estudantes <- ifelse(prob_nao_estudantes > 0.5, "Yes", "No")
+pred_nao_estudantes <- factor(pred_nao_estudantes, levels = levels(Default$default))
+
+cm_nao_estudantes <- table(Observado = validacao_nao_estudantes$default, Previsto = pred_nao_estudantes)
+print("### Matriz de Confusão para Não-Estudantes (Limiar 0.5):")
+print(cm_nao_estudantes)
+
+custo_nao_estudantes <- calcular_custo_total(cm_nao_estudantes, C_FP_ML, C_FN_ML)
+print(paste("Custo Total para Não-Estudantes (Limiar 0.5):", custo_nao_estudantes))
+print(paste("Custo Médio por Pessoa para Não-Estudantes (Limiar 0.5):", custo_nao_estudantes / nrow(validacao_nao_estudantes)))
+
+```
+
+
+**Análise e Recomendação da Parte B:**
+O cenário envolve custos assimétricos: o custo de um falso negativo (FN - prever que um cliente NÃO vai inadimplir, mas ele INADIMPLI) é 5 vezes maior que o de um falso positivo (FP - prever que um cliente vai inadimplir, mas ele NÃO INADIMPLI).
+Desempenho Normalizado: em média, o custo por estudante é significativamente maior do que o custo por não-estudante. Isso sugere que o modelo, com o limiar padrão de 0.5, está gerando mais erros custosos (principalmente Falsos Negativos, dado que C_FN é muito maior) para o grupo de estudantes, ou que a taxa base de inadimplência e a dificuldade de previsão são diferentes entre os grupos.
+Considerando a distribuição dos erros os estudantes tiveram 29 FN e 4 FP e os não-estudantes tiveram 40 FN e 5 FP. Embora o número absoluto de FNs seja maior para não-estudantes, o impacto proporcional é mais alto para estudantes quando considerada a sua menor população no subgrupo de validação. A proporção de FNs para o total de inadimplentes é maior entre estudantes (29 de 41 ~ 70.7%) do que entre não-estudantes (40 de 58 ~ 69.0%). No entanto, o custo por FN é alto, e a taxa de FNs é um grande motor do custo total.
+
+Com base nesta análise normalizada do custo médio por pessoa, não seria recomendável implantar este único modelo com um único limiar (0.5) para todos os clientes sem otimização ou ajuste. O custo médio por pessoa é consideravelmente mais alto para o grupo de estudantes(Estudantes: 168.55 por pessoa, Não-Estudantes: 96.93). Isso indica que o modelo atual e o limiar padrão estão gerando um impacto financeiro desproporcionalmente maior para este subgrupo, provavelmente devido a uma maior dificuldade em prever sua inadimplência corretamente (resultando em mais falsos negativos caros) ou a uma calibração subótima do modelo para esse grupo.

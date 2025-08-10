@@ -1,0 +1,303 @@
+---
+title: "PPCA0026 - Tarefa de Casa: Validação Cruzada e Bootstrap"
+subtitle: "Análise de SVM e k-NN no dataset Iris"
+author: "SEU NOME COMPLETO AQUI"
+date: "2025-06-20"
+format: 
+  html:
+    embed-resources: true
+    toc: true
+    toc-depth: 3
+    theme: cosmo
+    code-fold: show
+    code-tools: true
+---
+
+**Prazo de Entrega:** 2025-06-29 23:59
+
+## Introdução
+
+Nesta tarefa, você aplicará os conceitos de Validação Cruzada (CV) e Bootstrap para selecionar e avaliar modelos de classificação. O objetivo é ir além da simples aplicação de funções prontas, focando na implementação dos mecanismos subjacentes para garantir um entendimento profundo dos métodos.
+
+**Objetivos de Aprendizagem:**
+
+1.  Observar a instabilidade da abordagem de validação com uma única divisão (treino/validação).
+2.  Implementar um loop de 5-fold Cross-Validation estratificado para selecionar hiperparâmetros para modelos SVM e k-NN.
+3.  Visualizar os resultados da busca por hiperparâmetros usando heatmaps e gráficos de slice.
+4.  Utilizar o Bootstrap em um conjunto de teste para quantificar a incerteza na estimativa do erro dos modelos finais.
+5.  Comparar modelos de forma robusta, analisando a distribuição dos seus rankings de performance sob reamostragem.
+
+**Instruções Gerais:**
+
+* Este arquivo serve como template. Você deve preencher as seções marcadas com seu código, saídas e respostas.
+* Para esta tarefa, usaremos o pacote `e1071` para SVM, `class` para k-NN, e o `tidyverse` para manipulação de dados e gráficos.
+* **Entrega:** Envie dois arquivos: este `.qmd` completo e o arquivo `.html` auto-contido resultante.
+
+---
+
+## 0. O Problema da Variabilidade de uma Única Divisão
+
+### Tarefa 0
+
+```{r task0_setup}
+#| message: false
+#| warning: false
+
+# Carregar pacotes
+library(tidyverse)
+library(class) # Para knn()
+library(e1071) # Para svm()
+library(caret) # Para createDataPartition
+
+# Filtrar o dataset iris para as duas espécies
+iris_duas_classes <- iris %>%
+  filter(Species %in% c("versicolor", "virginica")) %>%
+  mutate(Species = factor(Species)) # Recodifica os fatores para remover 'setosa'
+```{r task0_loop}
+#| echo: true
+#| eval: true
+
+# Vetor de sementes para testar
+sementes <- c(1, 42, 123) 
+erros_validacao <- c() # Vetor para armazenar os erros
+
+for (semente_atual in sementes) {
+  set.seed(semente_atual)
+  
+  # Criando uma divisão 80/20 estratificada (exemplo com caret)
+  indices_treino_static <- createDataPartition(iris_duas_classes$Species, p = 0.8, list = FALSE)
+  treino_static <- iris_duas_classes[indices_treino_static, ]
+  validacao_static <- iris_duas_classes[-indices_treino_static, ]
+  
+  # Treinar e avaliar o modelo k-NN com k=5
+  previsoes_knn <- knn(
+    train = treino_static[, 1:4],
+    test = validacao_static[, 1:4],
+    cl = treino_static$Species,
+    k = 5
+  )
+  erro <- mean(previsoes_knn != validacao_static$Species)
+  erros_validacao <- c(erros_validacao, erro)
+  cat(paste("Semente:", semente_atual, "- Erro de Validação:", round(erro, 4), "\n"))
+}
+```
+
+**Análise da Tarefa 0:**
+
+*SUA ANÁLISE AQUI:*
+
+---
+
+## Parte 1: Validação Cruzada para Seleção de Modelos
+
+### 1.1 Preparação dos Dados
+
+```{r task1.1_setup}
+#| echo: true
+#| eval: true
+
+# Divisão 70/30 estratificada para treino e teste
+set.seed(2025) # Semente fixa para a tarefa principal
+
+indices_treino <- createDataPartition(iris_duas_classes$Species, p = 0.7, list = FALSE)
+iris_treino <- iris_duas_classes[indices_treino, ]
+iris_teste <- iris_duas_classes[-indices_treino, ]
+
+cat(paste("Tamanho do conjunto de treino:", nrow(iris_treino), "\n"))
+cat(paste("Tamanho do conjunto de teste:", nrow(iris_teste), "\n"))
+```
+
+### 1.2 Seleção de Modelo SVM com 5-Fold CV
+
+**Exemplo de Uso do `svm()`:** Para ajudá-lo(a) a construir seu loop de CV, o bloco de código abaixo demonstra como treinar um modelo `svm`, fazer previsões e calcular o erro. Você precisará adaptar esta lógica para o seu loop, usando seus dados de `treino_cv` e `validacao_cv` em cada iteração.
+
+```{r svm_example}
+#| echo: true
+#| eval: true
+#| fig-cap: "Exemplo de uso da função svm()"
+
+# Este é um exemplo em uma única divisão (NÃO é a sua tarefa de CV)
+# Use esta sintaxe como guia para o que vai DENTRO do seu loop de CV
+
+# 1. Dados de exemplo (usando a mesma divisão 70/30 de antes)
+dados_treino_exemplo <- iris_treino
+dados_validacao_exemplo <- iris_teste
+
+# 2. Treinar um modelo SVM com parâmetros específicos
+modelo_svm_exemplo <- svm(
+  Species ~ ., 
+  data = dados_treino_exemplo,
+  kernel = "radial",
+  cost = 1,    # Exemplo de valor de cost
+  gamma = 0.5  # Exemplo de valor de gamma
+)
+
+# 3. Fazer previsões no conjunto de validação
+previsoes_exemplo <- predict(modelo_svm_exemplo, newdata = dados_validacao_exemplo)
+
+# 4. Calcular a taxa de erro
+tabela_confusao <- table(Observado = dados_validacao_exemplo$Species, Previsto = previsoes_exemplo)
+print(tabela_confusao)
+taxa_erro <- mean(previsoes_exemplo != dados_validacao_exemplo$Species)
+cat(paste("\nTaxa de Erro no exemplo:", round(taxa_erro, 4), "\n"))
+```{r task1.2_svm_cv}
+#| echo: true
+#| eval: true
+#| message: false
+#| warning: false
+
+# 1. Defina a Grade de Busca (use a função expand.grid())
+# ...
+
+# 2. Crie os 5 folds estratificados a partir de `iris_treino`
+# ... 
+
+# 3. Loop de 5-Fold CV
+# ...
+
+# 4. Calcule o erro médio de CV para cada par de hiperparâmetros
+# ...
+
+# 5. Visualize os resultados (heatmap e gráfico de slice)
+# ... SEU CÓDIGO ggplot2 AQUI ...
+
+```
+
+**Análise da Tarefa 1.2:**
+
+*SUA ANÁLISE AQUI:*
+
+### 1.3 Seleção de Modelo k-NN com 5-Fold CV
+
+```{r task1.3_knn_cv}
+#| echo: true
+#| eval: true
+
+# ... SEU CÓDIGO AQUI ...
+```
+
+**Análise da Tarefa 1.3:**
+
+*SUA ANÁLISE AQUI:*
+
+### 1.4 Análise Final dos Modelos e Erro de Teste
+
+```{r task1.4_final_models}
+#| echo: true
+#| eval: true
+
+# ... SEU CÓDIGO AQUI ...
+```
+
+**Análise da Tarefa 1.4:**
+
+*SUA ANÁLISE E TABELA AQUI:*
+
+---
+
+## Parte 2: Bootstrap para Quantificar a Incerteza
+
+### 2.1 Gerando Amostras Bootstrap
+
+```{r task2.1_bootstrap_samples}
+#| echo: true
+#| eval: true
+
+# ... SEU CÓDIGO AQUI ...
+```
+
+### 2.2 Análise da Distribuição do Erro
+
+```{r task2.2_error_distribution}
+#| echo: true
+#| eval: true
+
+# ... SEU CÓDIGO AQUI ...
+```
+
+**Análise da Tarefa 2.2:**
+
+*SUA ANÁLISE AQUI:*
+
+### 2.3 Análise de Ranking dos Modelos
+
+```{r task2.3_rank_analysis}
+#| echo: true
+#| eval: true
+
+# ... SEU CÓDIGO AQUI ...
+```
+
+**Análise da Tarefa 2.3:**
+
+*SUA ANÁLISE AQUI:*
+
+---
+
+## Parte 3: Síntese e Pensamento Crítico
+
+### Pergunta Conceitual Obrigatória
+
+*SUA RESPOSTA AQUI:*
+
+---
+
+## Dicas e Pontos de Atenção
+
+```{r tips, include=FALSE, eval=FALSE}
+#| echo: false
+
+# --- Dica para Estratificação Manual para CV ---
+# Para implementar a estratificação manual no seu loop de 5-fold CV, uma abordagem é:
+# 1. Separar os índices do `iris_treino` por espécie.
+# 2. Para cada espécie, dividir seus índices aleatoriamente em 5 folds.
+# 3. Combinar os folds correspondentes de cada espécie para criar os 5 folds estratificados finais.
+
+# --- Dicas Tidyverse ---
+
+# Dica para calcular médias por grupo (usado para obter o erro médio de CV)
+# Suponha que `resultados_cv` é um dataframe com colunas `cost`, `gamma`, `erro_validacao`
+# library(dplyr)
+# sumario_erros <- resultados_cv %>%
+#   group_by(cost, gamma) %>%
+#   summarise(
+#     erro_medio_cv = mean(erro_validacao),
+#     sd_erro_cv = sd(erro_validacao) # O desvio padrão também é útil!
+#   )
+
+# Dica para armazenar resultados de loops em um dataframe longo (útil para Bootstrap)
+#
+# # Inicialize uma lista vazia antes do loop
+# lista_de_resultados <- list()
+#
+# # Dentro do loop (e.g., for i in 1:B)
+#   ...
+#   # Depois de calcular os erros para a iteração i
+#   erros_iteracao_i <- c(erro_svm1, erro_svm2, erro_knn1, erro_knn2)
+#   nomes_modelos <- c("SVM1", "SVM2", "kNN1", "kNN2")
+#
+#   lista_de_resultados[[i]] <- data.frame(
+#     id_bootstrap = i,
+#     modelo = nomes_modelos,
+#     erro = erros_iteracao_i
+#   )
+#
+# # Depois que o loop terminar, combine tudo em um único dataframe
+# resultados_finais_df <- bind_rows(lista_de_resultados)
+#
+# # O formato longo também simplifica o cálculo dos ranks.
+# # Você pode agrupar por `id_bootstrap` e usar `mutate()` com a função `rank()`
+# # para criar uma nova coluna com os rankings para cada amostra.
+# # Exemplo:
+# # resultados_finais_df %>%
+# #   group_by(id_bootstrap) %>%
+# #   mutate(ranking = rank(erro, ties.method = "random"))
+#
+# # Este formato longo é ideal para usar com `ggplot2`
+# ggplot(resultados_finais_df, aes(x = modelo, y = erro, fill = modelo)) +
+#   geom_boxplot()
+```
+
+## Desafio Opcional
+
+*SEU CÓDIGO E ANÁLISE PARA O DESAFIO OPCIONAL AQUI (SE APLICÁVEL).*

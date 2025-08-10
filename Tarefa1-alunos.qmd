@@ -1,0 +1,290 @@
+---
+title: "PPCA0026 - Tarefa de Casa 1: Introdução ao Quarto com R"
+author: "Seu Nome Aqui" # Substitua pelo seu nome
+date: "today"
+format:
+  html:
+    embed-resources: true # Para criar um arquivo HTML auto-contido
+    toc: true # Adiciona um sumário
+    toc-depth: 2
+    theme: cosmo # Você pode experimentar outros temas: https://quarto.org/docs/output-formats/html-themes.html
+    code-fold: true # Permite que os leitores expandam/recolham blocos de código
+    code-tools: true # Adiciona ferramentas para copiar código, etc.
+editor: source
+---
+
+## Introdução
+
+Bem-vindo(a) à primeira tarefa de casa da disciplina PPCA0026!
+
+**Objetivos desta tarefa:**
+
+1.  Familiarizar-se com a criação de documentos `.qmd` (Quarto Markdown).
+2.  Aprender a integrar texto narrativo, blocos de código R e a saída desses blocos (incluindo gráficos e tabelas) em um único arquivo HTML auto-contido.
+3.  Praticar a criação de visualizações de dados básicas com `ggplot2` e manipulação de dados elementar com `dplyr`, baseando-se nos exemplos da Semana 1, Parte 2 e no Capítulo 1 do livro "R para Ciência de Dados" (R4DS).
+
+**Referência Principal para Quarto:**
+
+* Capítulo 28 do R4DS (tradução para o português): [Quarto - R para Ciência de Dados](https://pt.r4ds.hadley.nz/quarto.html)
+
+**Instruções Gerais:**
+
+* Substitua `"Seu Nome Aqui"` no cabeçalho YAML pelo seu nome completo.
+* Complete as seções de código R onde indicado.
+* Escreva suas interpretações e respostas textuais onde solicitado.
+* Após completar o arquivo `.qmd`, renderize-o para HTML. Certifique-se de que a opção `embed-resources: true` está no cabeçalho YAML para que o HTML seja auto-contido.
+* Envie **ambos** os arquivos: o `.qmd` e o `.html` resultante.
+
+---
+
+## 1. Configuração Inicial
+
+Este primeiro bloco de código carrega os pacotes necessários.
+A opção de chunk `include: false` significa que o código será executado, mas nem o código nem sua saída aparecerão no documento HTML final. Isso é útil para códigos de configuração.
+
+```{r setup}
+#| include: false
+#| message: false
+#| warning: false
+
+# Carregue o pacote tidyverse, que inclui ggplot2 e dplyr
+library(tidyverse)
+```
+
+Agora que o `tidyverse` está carregado, podemos acessar o conjunto de dados `mpg`.
+
+```{r verificar_mpg}
+#| echo: true 
+#| eval: true
+
+# Vamos dar uma olhada nas primeiras linhas do dataset mpg
+# e na sua estrutura para nos familiarizarmos.
+head(mpg)
+str(mpg)
+?mpg # Para ver a documentação do dataset
+```
+
+---
+
+## 2. Primeiro Gráfico: Consumo na Estrada vs. Cilindrada
+
+Nesta seção, você criará um gráfico de dispersão para explorar a relação entre a cilindrada do motor (`displ`) e o consumo de combustível na estrada (`hwy`), usando o dataset `mpg`.
+
+**Tarefa:**
+
+1.  Crie um gráfico de dispersão (`geom_point`) com `displ` no eixo x e `hwy` no eixo y.
+2.  Mapeie a variável `class` (tipo de carro) para a estética `color` dos pontos.
+3.  Adicione um título informativo ao gráfico e rótulos apropriados para os eixos x e y (em português).
+4.  Escreva uma breve interpretação do gráfico na seção de texto abaixo do bloco de código.
+
+```{r scatter_displ_hwy}
+#| echo: true  # Mostra o código no documento final
+#| eval: true   # Executa o código
+#| fig-cap: "Gráfico de dispersão: Consumo na estrada (hwy) vs. Cilindrada do motor (displ), colorido por classe do veículo."
+#| fig-width: 8
+#| fig-height: 5
+
+# Seu código ggplot2 aqui para criar o gráfico de dispersão.
+# Lembre-se de usar ggplot(), geom_point() e labs().
+
+```
+
+**Interpretação do Gráfico de Dispersão:**
+
+*Escreva sua interpretação aqui. O que você observa sobre a relação entre `displ` e `hwy`? Como a `class` do veículo parece influenciar essa relação?*
+
+---
+
+## 3. Adicionando uma Linha de Suavização
+
+Vamos aprimorar o gráfico anterior adicionando uma linha de suavização para visualizar melhor a tendência geral.
+
+**Tarefa:**
+
+1.  Copie o código do gráfico anterior.
+2.  Adicione uma camada `geom_smooth()` ao gráfico. Mantenha o mapeamento de cores por `class` para a linha de suavização também, se desejar (ou crie uma linha de suavização geral).
+3.  Observe a linha (ou linhas) de suavização. O que ela(s) sugere(m)?
+
+```{r scatter_smooth}
+#| echo: true
+#| eval: true
+#| fig-cap: "Dispersão de hwy vs. displ com linha de suavização, por classe."
+#| fig-width: 8
+#| fig-height: 5
+
+# Seu código ggplot2 aqui (baseado no anterior, adicionando geom_smooth).
+# Dica: você pode adicionar geom_smooth() diretamente ao seu código ggplot anterior.
+# Considere se quer uma linha de suavização geral ou uma para cada 'class'.
+
+```
+
+**Interpretação da Linha de Suavização:**
+
+*O que a linha de suavização (ou as linhas, se você fez por classe) indica sobre a tendência da relação entre `displ` e `hwy`? A relação parece ser linear?*
+
+---
+
+## 4. Explorando Consumo com Boxplots
+
+Boxplots são úteis para comparar distribuições de uma variável contínua entre diferentes grupos de uma variável categórica.
+
+**Tarefa:**
+
+1.  Crie um boxplot que mostre a distribuição do consumo na estrada (`hwy`) para cada tipo de tração (`drv`).
+2.  Adicione um título e rótulos apropriados aos eixos (em português).
+3.  Interprete o boxplot.
+
+```{r boxplot_hwy_drv}
+#| echo: true
+#| eval: true
+#| fig-cap: "Boxplot do consumo na estrada (hwy) por tipo de tração (drv)."
+#| fig-width: 7
+#| fig-height: 5
+
+# Seu código ggplot2 aqui para criar o boxplot.
+# Use geom_boxplot(). Você pode mapear 'drv' para o preenchimento (fill) também.
+
+```
+
+**Interpretação do Boxplot:**
+
+*Quais tipos de tração (`drv`) tendem a ter maior/menor consumo na estrada (`hwy`)? Existem diferenças notáveis na variabilidade ou presença de outliers entre os grupos?*
+
+---
+
+## 5. Sumarizando Dados com `dplyr` e Visualizando
+
+Muitas vezes, queremos calcular estatísticas resumo e depois visualizá-las.
+
+**Tarefa:**
+
+1.  Use `dplyr` para calcular o consumo médio na cidade (`cty`) para cada fabricante (`manufacturer`).
+    * Agrupe os dados por `manufacturer`.
+    * Calcule a média de `cty` para cada grupo.
+2.  Crie um gráfico de colunas (`geom_col`) para visualizar essas médias.
+    * Como existem muitos fabricantes, pode ser útil reordenar as barras para melhor visualização (e.g., da maior para a menor média). Dica: use `reorder()` dentro de `aes()`.
+3.  Adicione um título e rótulos apropriados (em português).
+4.  Interprete o gráfico.
+
+```{r dplyr_barplot}
+#| echo: true
+#| eval: true
+#| fig-cap: "Consumo médio na cidade (cty) por fabricante."
+#| fig-width: 10 # Aumentar a largura para melhor visualização dos fabricantes
+#| fig-height: 6
+
+# Passo 1: Usar dplyr para sumarizar os dados
+# Crie um objeto chamado 'sumario_cty_fabricante'
+# Use group_by() e summarise() com mean().
+# sumario_cty_fabricante <- mpg %>% ...
+
+# Ver o sumário (opcional, mas bom para verificar durante o desenvolvimento)
+# print(sumario_cty_fabricante)
+
+# Passo 2: Criar o gráfico de colunas com ggplot2
+# Use o 'sumario_cty_fabricante' como dados.
+# Use geom_col().
+# Para reordenar, use aes(x = reorder(manufacturer, -media_cty), y = media_cty)
+# Lembre-se de adicionar labs() e possivelmente theme() para ajustar os rótulos do eixo x.
+
+```
+
+**Interpretação do Gráfico de Colunas:**
+
+*Quais fabricantes têm, em média, o melhor e o pior consumo na cidade? Há alguma surpresa?*
+
+---
+
+## 6. Tarefas Opcionais (Para Explorar Mais)
+
+Estas tarefas são opcionais e servem para você praticar um pouco mais com `ggplot2` e Quarto.
+
+### Opcional 1: Facetas
+
+Pegue o gráfico de dispersão de `hwy` vs `displ` (tarefa 2 ou 3) e use `facet_wrap(~ cyl)` para criar painéis separados para cada número de cilindros (`cyl`). Como isso muda sua interpretação?
+
+```{r opcional_facetas, eval=FALSE}
+#| echo: true # Mude para true se for tentar
+#| fig-cap: "Dispersão de hwy vs. displ, facetado por número de cilindros."
+#| fig-width: 9
+#| fig-height: 6
+
+# Seu código aqui (copie e modifique o código da tarefa 2 ou 3)
+# Adicione: + facet_wrap(~ cyl, nrow = 2) # ou ncol, como preferir
+
+```
+
+*Sua interpretação aqui (se fizer esta tarefa opcional).*
+
+### Opcional 2: Outro `geom`
+
+Experimente usar um `geom` diferente em um dos seus gráficos. Por exemplo:
+
+* Adicione `geom_jitter()` ao seu boxplot da tarefa 4 para ver melhor a distribuição dos pontos.
+* Crie um gráfico de violino (`geom_violin`) em vez do boxplot na tarefa 4.
+
+```{r opcional_outro_geom, eval=FALSE}
+#| echo: true
+#| fig-cap: "Exemplo de outro geom (e.g., gráfico de violino)."
+#| fig-width: 7
+#| fig-height: 5
+
+# Seu código aqui (e.g., para geom_violin)
+
+```
+
+*Sua interpretação aqui (se fizer esta tarefa opcional).*
+
+### Opcional 3: Personalização Avançada
+
+Escolha um dos seus gráficos e personalize sua aparência:
+
+* Mude o tema (e.g., `+ theme_bw()`, `+ theme_minimal()`, `+ theme_light()`).
+* Altere os títulos da legenda (e.g., `labs(color = "Nova Legenda")`).
+
+```{r opcional_personalizacao, eval=FALSE}
+#| echo: true
+#| fig-cap: "Gráfico com personalização de tema e legenda."
+
+# Seu código aqui
+
+```
+
+*Descreva as personalizações que você fez (se fizer esta tarefa opcional).*
+
+### Opcional 4: Interpretação Estendida
+
+Escolha um dos gráficos das tarefas principais e escreva um parágrafo mais detalhado (3-5 frases) sobre os padrões, outliers ou quaisquer outros insights interessantes que você observou.
+
+*Sua interpretação estendida aqui (se fizer esta tarefa opcional).*
+
+### Opcional 5: Ocultando o Código
+
+Crie um gráfico (pode ser um novo ou uma variação de um anterior) onde o código R **não** é mostrado no documento HTML final, mas o gráfico **é** renderizado. (Dica: use a opção de chunk `echo: false`).
+
+```{r opcional_echo_false, echo=FALSE, eval=FALSE}
+#| fig-cap: "Gráfico gerado com código oculto."
+#| fig-width: 7
+#| fig-height: 5
+
+# Seu código ggplot2 aqui.
+# Lembre-se de mudar eval=FALSE para eval=TRUE para que o gráfico seja gerado.
+
+```
+
+*(Se você fizer esta tarefa, o código acima não aparecerá, mas o gráfico sim, se `eval=TRUE`)*.
+
+---
+
+## Conclusão e Submissão
+
+Parabéns por completar (ou tentar!) sua primeira tarefa com Quarto!
+
+**Para submeter:**
+
+1.  Certifique-se de que seu nome está no cabeçalho YAML.
+2.  Clique no botão "Render" no RStudio (ou use o comando `quarto render seu_arquivo.qmd` no terminal) para gerar o arquivo HTML.
+3.  Verifique o arquivo HTML gerado para garantir que tudo aparece como esperado (texto, código, saídas, gráficos).
+4.  Envie **ambos** os arquivos: `seu_arquivo.qmd` e `seu_arquivo.html`.
+
+Bom trabalho!

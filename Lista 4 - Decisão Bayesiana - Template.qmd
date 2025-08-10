@@ -1,0 +1,321 @@
+---
+title: "PPCA0026 - Tarefa de Casa: Teoria da Decisão Bayesiana na Prática"
+subtitle: "Aplicando os Conceitos da Semana 5"
+author: "Denard Costa Soares"
+date: "2025-07-11"
+format:
+  html:
+    embed-resources: true
+    toc: true
+    toc-depth: 3
+    theme: cosmo
+    code-fold: show
+    code-tools: true
+---
+
+**Prazo de Entrega:** 2025-07-20 23:59
+
+## Introdução
+
+Nesta tarefa, você aprofundará seu conhecimento sobre o Framework de Decisão Bayesiana. O objetivo é ir além da introdução vista em aula e aplicar o framework completo para tomar decisões ótimas sob incerteza, tanto com crenças a priori quanto com crenças atualizadas por dados (a posteriori).
+
+**Instruções Gerais:**
+
+* Este arquivo serve como seu template de resposta. Preencha as seções marcadas com seu código R, as saídas geradas, e suas análises textuais.
+* **Entrega:** Envie dois arquivos: este `.qmd` completo e o arquivo `.html` auto-contido resultante.
+
+---
+
+## Problema 1: Decisão Ótima com Priori e Custos Discretos
+
+Neste problema, você atuará como um consultor para uma empresa farmacêutica, usando a teoria da decisão para recomendar uma estratégia para o lançamento de um novo medicamento.
+
+### Cenário
+
+Uma empresa está testando um novo medicamento. A decisão a ser tomada é se deve **"Lançar"** o medicamento com base nos resultados de um ensaio clínico ou **"Não Lançar"**.
+
+* **Hipótese Nula ($H_0$)**: O medicamento não tem efeito (a diferença média de melhora, `d`, é 0).
+* **Hipótese Alternativa ($H_1$)**: O medicamento tem um efeito ($d > 0$).
+* **Custos dos Erros**:
+    * **Erro Tipo I (Falso Positivo):** Lançar um medicamento ineficaz. O custo ($C_I$) é de **$1,000,000**.
+    * **Erro Tipo II (Falso Negativo):** Não lançar um medicamento que é eficaz. O custo ($C_{II}$) depende do tamanho do efeito perdido. A empresa estima que $C_{II}(d) = d \times \$10,000,000$.
+* **Crença a Priori**: Antes do ensaio clínico final, a diretoria acredita que há **50% de chance de o medicamento não ter efeito** ($P(d=0) = 0.5$). Se ele tiver um efeito, eles acreditam que as probabilidades são: 50% de chance de ser um efeito "pequeno" ($d=0.2$), 30% de ser "médio" ($d=0.5$), e 20% de ser "grande" ($d=1.0$).
+* **O Ensaio Clínico**: O ensaio será realizado com `n=50` pacientes por grupo e $\sigma=1$.
+
+### Parte A: A Decisão a Priori
+
+#### 1. Calcule as Probabilidades a Priori
+
+```{r prob1a_priors}
+# Carregue os pacotes necessários
+library(tidyverse)
+library(knitr)
+# A probabilidade de H0 (d=0) é 0.5 
+p_d0 <- 0.5
+
+# As probabilidades condicionais de d > 0 somam 1 (50% + 30% + 20%) 
+# A probabilidade total de d > 0 é 1 - p_d0 = 0.5
+# As probabilidades a priori incondicionais são:
+p_d_pequeno <- 0.5 * 0.50 # P(d>0) * P(d=0.2 | d>0) 
+p_d_medio   <- 0.5 * 0.30 # P(d>0) * P(d=0.5 | d>0) 
+p_d_grande  <- 0.5 * 0.20 # P(d>0) * P(d=1.0 | d>0) 
+
+# Armazene-as em um data frame
+priors_df <- tibble(
+  estado_mundo = c("Nenhum Efeito (d=0)", "Efeito Pequeno (d=0.2)", "Efeito Médio (d=0.5)", "Efeito Grande (d=1.0)"),
+  d = c(0, 0.2, 0.5, 1.0),
+  prob_priori = c(p_d0, p_d_pequeno, p_d_medio, p_d_grande)
+)
+
+# Apresenta a tabela de probabilidades a priori
+kable(priors_df, 
+      col.names = c("Estado do Mundo", "Valor de 'd'", "Probabilidade a Priori"),
+      caption = "Probabilidades a Priori para Cada Estado do Mundo.",
+      digits = 2)
+
+```
+
+**Análise da Tarefa 1.A.1:**
+
+As probabilidades a priori para cada estado do mundo (tamanho do efeito d) foram calculadas com base nas crenças da diretoria. A probabilidade de o medicamento não ter efeito (d=0) é de 0.5. A probabilidade de ele ter algum efeito é também de 0.5, que foi distribuída entre os possíveis tamanhos de efeito (0.2, 0.5, 1.0) conforme as crenças condicionais fornecidas, resultando nas probabilidades marginais mostradas na tabela acima.
+
+#### 2. Simule o Risco Esperado a Priori
+
+```{r prob1a_risk_sim}
+# Você precisará de uma função para calcular o poder, como a da tarefa anterior.
+# Se necessário, defina-a aqui.
+# Função para calcular o poder de um teste z de uma cauda
+# O desvio padrão da diferença (SE) é sqrt(sigma^2/n1 + sigma^2/n2)
+# Com sigma=1 e n=50 por grupo, SE = sqrt(1/50 + 1/50) = sqrt(2/50) = 0.2 
+SE <- sqrt(1^2/50 + 1^2/50)
+
+calcular_poder <- function(n, d, sigma, alpha) {
+  # Esta função calcula o poder para um teste z de uma cauda.
+  se <- sqrt(2 * sigma^2 / n)
+  z_critico <- qnorm(1 - alpha)
+  poder <- pnorm(z_critico - d / se, lower.tail = FALSE)
+  return(poder)
+}
+
+# Defina os parâmetros da simulação
+custo_I <- 1000000 # Custo do Erro Tipo I 
+custo_II_func <- function(d) { d * 10000000 } # Custo do Erro Tipo II 
+
+# Adicione custos ao data frame de priors
+priors_df <- priors_df %>%
+  mutate(
+    custo_I = ifelse(d == 0, custo_I, 0),
+    custo_II = ifelse(d > 0, custo_II_func(d), 0)
+  )
+
+# Crie uma gama de valores de alpha para testar
+alphas <- seq(0.01, 0.5, by = 0.01)
+
+# Calcule o Risco Esperado para cada alpha
+risco_esperado <- sapply(alphas, function(alpha) {
+  # Para cada alpha, calcule o poder para cada d > 0
+  poderes <- sapply(priors_df$d[priors_df$d > 0], function(d_val) {
+    calcular_poder(n = 50, d = d_val, sigma = 1, alpha = alpha)
+  })
+  
+  # Probabilidade de Erro Tipo II (beta) é 1 - poder
+  betas <- 1 - poderes
+  
+  # Risco de Erro Tipo I
+  risco_I <- priors_df$prob_priori[1] * priors_df$custo_I[1] * alpha
+  
+  # Risco de Erro Tipo II
+  risco_II <- sum(priors_df$prob_priori[2:4] * priors_df$custo_II[2:4] * betas)
+  
+  # Risco Total
+  risco_total <- risco_I + risco_II
+  return(risco_total)
+})
+
+risco_df <- tibble(alpha = alphas, risco = risco_esperado)
+
+```
+
+
+#### 3. Encontre a Regra de Decisão Ótima
+
+```{r prob1a_plot_risk}
+# Plote o Risco Esperado vs. α
+# ... seu código ggplot2 aqui ...
+
+
+# Plote o Risco Esperado vs. α
+ggplot(risco_df, aes(x = alpha, y = risco)) +
+  geom_line(color = "blue", size = 1) +
+  geom_point(data = risco_df %>% filter(risco == min(risco)), color = "red", size = 4) +
+  scale_y_continuous(labels = scales::dollar_format(prefix = "$", scale = 1e-6, suffix = "M")) +
+  labs(
+    title = "Risco Esperado a Priori vs. Nível de Significância (α)",
+    x = "Nível de Significância (α)",
+    y = "Risco Esperado",
+    caption = "O ponto vermelho indica o risco mínimo."
+  ) +
+  theme_minimal()
+
+# Encontre e reporte o α_ótimo e o risco mínimo correspondente
+alpha_otimo <- risco_df$alpha[which.min(risco_df$risco)]
+risco_minimo <- min(risco_df$risco)
+print(alpha_otimo)
+print(risco_minimo)
+```
+
+**Análise da Tarefa 1.A.3:**
+O ponto mais baixo da curva, destacado em vermelho, representa o equilíbrio ideal entre a regra de decisão do ensaio clínico (o nível de significância α) e o prejuízo financeiro esperado pela empresa. Este é o ponto onde o risco financeiro esperado é minimizado.
+A regra de decisão ótima para a empresa não é o tradicional α=0.05. Em vez disso, a análise bayesiana, que incorpora os custos e as crenças específicas da empresa, recomenda o uso de um α=0.37. Adotar este critério para o ensaio clínico é a estratégia que oferece o menor prejuízo esperado, totalizando $322.316,80. Este valor representa o custo que a empresa espera ter ao se comprometer com a estratégia de teste, antes mesmo de ver os dados.
+
+#### 4. Tome a Decisão a Priori
+
+```{r prob1a_prior_decision}
+# Calcule o risco da estratégia "Não Lançar"
+# Este é o custo esperado de cometer um Erro Tipo II, sem nunca testar
+risco_nao_lancar <- sum(priors_df$prob_priori * priors_df$custo_II)
+
+# Compare os riscos e determine a ação ótima a priori
+decisao_priori <- if (risco_minimo < risco_nao_lancar) {
+  decisao_final_priori <- "A ação ótima é 'Testar e Lançar se p < 0.37'."
+  print(paste("Risco da Estratégia 'Testar com α_ótimo':", scales::dollar(risco_minimo)))
+} else {
+  decisao_final_priori <- "A ação ótima é 'Não Lançar'."
+print(paste("Risco da Estratégia 'Não Lançar':", scales::dollar(risco_nao_lancar)))
+}
+print(paste("Decisão a Priori:", decisao_final_priori))
+
+```
+
+**Análise da Tarefa 1.A.4:**
+
+Decisão Ótima a Priori:
+
+Ao comparar os riscos das duas estratégias, vemos que o risco de testar ($322.316,80) é significativamente menor do que o risco de simplesmente não lançar o medicamento ($2.250.000).
+
+Portanto, a ação ótima a priori é realizar o ensaio clínico usando a regra de decisão com 
+alpha=0.37. Embora o teste em si tenha um risco associado, ele é muito preferível à perda esperada de mais de 2 milhões de dólares que ocorreria se a empresa abandonasse um medicamento potencialmente eficaz sem investigá-lo adequadamente.
+
+### Parte B: A Decisão a Posteriori (Atualização com Dados)
+
+#### Cenário 1: Dados Desanimadores ($\hat{d}_1 = 0.15, SE = 0.2$)
+
+```{r cenario1}
+# Dados observados
+d_obs_1 <- 0.15
+se_obs <- 0.2
+
+# 1. Calcule a verossimilhança para cada estado do mundo d
+# A verossimilhança dos dados (d_obs) para cada possível valor de d é P(d_obs | d)
+# Usamos a densidade da distribuição Normal: d_obs ~ N(d, se_obs^2)
+verossimilhanca_1 <- dnorm(d_obs_1, mean = priors_df$d, sd = se_obs)
+
+# 2. Calcule as probabilidades a posteriori
+# P(d | d_obs) ∝ P(d_obs | d) * P(d)
+prob_conjunta_1 <- verossimilhanca_1 * priors_df$prob_priori
+# Normalizar para que a soma seja 1
+prob_posteriori_1 <- prob_conjunta_1 / sum(prob_conjunta_1)
+
+# Armazene em um data frame para análise
+results_cenario1 <- priors_df %>%
+  mutate(
+    verossimilhanca = verossimilhanca_1,
+    prob_posteriori = prob_posteriori_1
+  )
+
+# 3. Calcule o Risco Esperado a Posteriori para "Lançar" e "Não Lançar"
+# Risco(Lançar | dados) = P(d=0 | dados) * Custo(Erro Tipo I)
+risco_lancar_post_1 <- results_cenario1$prob_posteriori[1] * results_cenario1$custo_I[1]
+
+# Risco(Não Lançar | dados) = Σ [P(d>0 | dados) * Custo(Erro Tipo II)]
+risco_nao_lancar_post_1 <- sum(results_cenario1$prob_posteriori[2:4] * results_cenario1$custo_II[2:4])
+
+# 4. Determine a ação ótima a posteriori
+acao_otima_1 <- ifelse(risco_lancar_post_1 < risco_nao_lancar_post_1, "Lançar", "Não Lançar")
+
+kable(results_cenario1 %>% select(estado_mundo, prob_priori, prob_posteriori),
+      col.names = c("Estado do Mundo", "Prob. a Priori", "Prob. a Posteriori"),
+      caption = "Atualização das Crenças no Cenário 1.",
+      digits = 4)
+
+print(paste("Risco da Estratégia 'Lançar':", scales::dollar(risco_lancar_post_1)))
+print(paste("Risco da Estratégia 'Não Lançar':", scales::dollar(risco_nao_lancar_post_1)))
+print(acao_otima_1)
+
+
+```
+
+**Análise do Cenário 1:**
+
+A ação ótima é aquela que minimiza o risco esperado. Comparando os dois valores, o risco de "Lançar" ($578.705) é significativamente menor do que o risco de "Não Lançar" ($991.958). Portanto, a ação ótima a posteriori é Lançar o medicamento.
+
+Os efeitos dos dados "desanimadores" foi o reforço na incerteza, pois os dados fortaleceram a crença de que o medicamento provavelmente não tem um efeito grande, aumentando a probabilidade de um efeito nulo ou pequeno, e não inverteram a decisão. Apesar do aumento na probabilidade de o medicamento ser ineficaz (P(d=0) = 0.58), o custo associado a esse erro (Risco de Lançar = $578.705) ainda é menor do que o custo de oportunidade de não lançar um medicamento que, segundo as novas crenças, ainda tem uma chance considerável de ter um efeito pequeno ou médio (Risco de Não Lançar = $991.958).
+
+Em suma, os dados enfraqueceram o otimismo sobre o medicamento, mas não a ponto de tornar o abandono a melhor opção financeira. O alto custo de oportunidade de perder um medicamento eficaz ainda supera o risco de lançar um produto ineficaz, mesmo quando a probabilidade deste último aumentou.
+
+#### Cenário 2: Dados Promissores ($\hat{d}_2 = 0.60, SE = 0.2$)
+
+```{r cenario2}
+# Repita os passos 1-4 para o Cenário 2
+# Dados observados
+d_obs_2 <- 0.60
+
+# 1. Calcule a verossimilhança
+verossimilhanca_2 <- dnorm(d_obs_2, mean = priors_df$d, sd = se_obs)
+
+# 2. Calcule as probabilidades a posteriori
+prob_conjunta_2 <- verossimilhanca_2 * priors_df$prob_priori
+prob_posteriori_2 <- prob_conjunta_2 / sum(prob_conjunta_2)
+
+results_cenario2 <- priors_df %>%
+  mutate(
+    verossimilhanca = verossimilhanca_2,
+    prob_posteriori = prob_posteriori_2
+  )
+
+# 3. Calcule o Risco Esperado a Posteriori
+risco_lancar_post_2 <- results_cenario2$prob_posteriori[1] * results_cenario2$custo_I[1]
+risco_nao_lancar_post_2 <- sum(results_cenario2$prob_posteriori[2:4] * results_cenario2$custo_II[2:4])
+
+kable(results_cenario2 %>% select(estado_mundo, prob_priori, prob_posteriori),
+      col.names = c("Estado do Mundo", "Prob. a Priori", "Prob. a Posteriori"),
+      caption = "Atualização das Crenças no Cenário 2.",
+      digits = 4)
+# 4. Determine a ação ótima a posteriori
+acao_otima_2 <- ifelse(risco_lancar_post_2 < risco_nao_lancar_post_2, "Lançar", "Não Lançar")
+
+print(paste("Risco da Estratégia 'Lançar':", scales::dollar(risco_lancar_post_2)))
+print(paste("Risco da Estratégia 'Não Lançar':", scales::dollar(risco_nao_lancar_post_2)))
+print(acao_otima_2)
+
+```
+
+**Análise do Cenário 2:**
+
+A crença de que o medicamento não tem efeito (d=0) despencou de 50% para apenas 3%.A crença em um efeito médio (d=0.5) saltou de 15% para se tornar a hipótese dominante, com 71.44% de probabilidade.
+O risco de "Lançar" ($29.976,29) é mais de 150 vezes menor que o risco de "Não Lançar" ($4.667.526). Portanto, a ação ótima a posteriori é, sem dúvida, Lançar o medicamento.
+Os dados promissores contrastaram fortemente com o cenário de dados desanimadores, com redução drástica da incerteza, pois eliminaram a crença de que o medicamento era ineficaz. A probabilidade de um Erro Tipo I (lançar um medicamento ineficaz) tornou-se muito pequena, fazendo com que o risco de "Lançar" caísse para um valor mínimo.E ao mesmo tempo, os dados criaram uma alta certeza de que o medicamento era eficaz. Isso fez com que o risco de "Não Lançar" (o custo de oportunidade de abandonar um produto de sucesso) se tornasse extremamente alto, refletindo uma perda quase certa de milhões em receita potencial.
+Em resumo, enquanto os dados desanimadores do Cenário 1 apenas ajustaram as probabilidades, os dados promissores do Cenário 2 provocaram uma mudança de paradigma nas crenças da empresa. Eles forneceram uma evidência forte que reforçou a decisão de prosseguir, tornando a escolha de "Lançar" não apenas a melhor opção, mas a única financeiramente racional.
+
+---
+
+## Problema 2: Estendendo para o Caso Contínuo (Desafio Opcional)
+
+### Tarefa
+
+1.  **Formule o Risco como uma Integral:**
+    *SUA EXPLICAÇÃO AQUI.*
+
+2.  **Implemente a Integração por Monte Carlo:**
+    ```{r prob2_mc_integration}
+    # ... seu código para a simulação de Monte Carlo aqui ...
+    ```
+
+3.  **Encontre a Regra e a Decisão Ótimas:**
+    ```{r prob2_optimal_continuous}
+    # ... seu código para encontrar e reportar alpha_ótimo e a decisão ótima ...
+    ```
+
+**Análise do Problema 2:**
+
+*SUA ANÁLISE AQUI:* Compare os resultados do caso contínuo com os do caso discreto. Eles são similares? O que isso sugere sobre a modelagem de crenças a priori?

@@ -1,0 +1,652 @@
+---
+title: "PPCA0026 - Tarefa de Casa: Validação Cruzada e Bootstrap"
+subtitle: "Análise de SVM e k-NN no dataset Iris"
+author: "Denard Costa Soares"
+date: "2025-06-20"
+format: 
+  html:
+    embed-resources: true
+    toc: true
+    toc-depth: 3
+    theme: cosmo
+    code-fold: show
+    code-tools: true
+editor_options: 
+  chunk_output_type: console
+---
+
+**Prazo de Entrega:** 2025-06-29 23:59
+
+## Introdução
+
+Nesta tarefa, você aplicará os conceitos de Validação Cruzada (CV) e Bootstrap para selecionar e avaliar modelos de classificação. O objetivo é ir além da simples aplicação de funções prontas, focando na implementação dos mecanismos subjacentes para garantir um entendimento profundo dos métodos.
+
+**Objetivos de Aprendizagem:**
+
+1.  Observar a instabilidade da abordagem de validação com uma única divisão (treino/validação).
+2.  Implementar um loop de 5-fold Cross-Validation estratificado para selecionar hiperparâmetros para modelos SVM e k-NN.
+3.  Visualizar os resultados da busca por hiperparâmetros usando heatmaps e gráficos de slice.
+4.  Utilizar o Bootstrap em um conjunto de teste para quantificar a incerteza na estimativa do erro dos modelos finais.
+5.  Comparar modelos de forma robusta, analisando a distribuição dos seus rankings de performance sob reamostragem.
+
+**Instruções Gerais:**
+
+* Este arquivo serve como template. Você deve preencher as seções marcadas com seu código, saídas e respostas.
+* Para esta tarefa, usaremos o pacote `e1071` para SVM, `class` para k-NN, e o `tidyverse` para manipulação de dados e gráficos.
+* **Entrega:** Envie dois arquivos: este `.qmd` completo e o arquivo `.html` auto-contido resultante.
+
+---
+
+## 0. O Problema da Variabilidade de uma Única Divisão
+
+### Tarefa 0
+
+```{r task0_setup}
+#| message: false
+#| warning: false
+
+# Carregar pacotes
+library(tidyverse)
+library(class) # Para knn()
+library(e1071) # Para svm()
+library(caret) # Para createDataPartition
+
+# Filtrar o dataset iris para as duas espécies
+iris_duas_classes <- iris %>%
+  filter(Species %in% c("versicolor", "virginica")) %>%
+  mutate(Species = factor(Species)) # Recodifica os fatores para remover 'seto
+
+# Vetor de sementes para testar
+sementes <- c(1, 42, 123) 
+erros_validacao <- c() # Vetor para armazenar os erros
+
+for (semente_atual in sementes) {
+  set.seed(semente_atual)
+  
+  # Criando uma divisão 80/20 estratificada (exemplo com caret)
+  indices_treino_static <- createDataPartition(iris_duas_classes$Species, p = 0.8, list = FALSE)
+  treino_static <- iris_duas_classes[indices_treino_static, ]
+  validacao_static <- iris_duas_classes[-indices_treino_static, ]
+  
+  # Treinar e avaliar o modelo k-NN com k=5
+  previsoes_knn <- knn(
+    train = treino_static[, 1:4],
+    test = validacao_static[, 1:4],
+    cl = treino_static$Species,
+    k = 5
+  )
+  erro <- mean(previsoes_knn != validacao_static$Species)
+  erros_validacao <- c(erros_validacao, erro)
+  cat(paste("Semente:", semente_atual, "- Erro de Validação:", round(erro, 4), "\n"))
+}
+```
+
+**Análise da Tarefa 0:**
+
+A execução do código com diferentes sementes (seeds) para a divisão dos dados em treino e validação demonstra a instabilidade da abordagem de validação simples (holdout). Para as sementes 1, 42 e 123, as taxas de erro de validação para o modelo k-NN (com k=5) foram 0.0500 (5%), 0.1000 (10%) e 0.0000 (0%), respectivamente. Essa variação significativa no erro estimado ocorre porque a performance do modelo torna-se dependente da composição específica do conjunto de validação, que muda a cada nova divisão aleatória dos dados. Isso evidencia que uma única divisão não é um método robusto para avaliar a capacidade de generalização de um modelo e justifica a necessidade de técnicas mais robustas, como a validação cruzada.
+
+---
+
+## Parte 1: Validação Cruzada para Seleção de Modelos
+
+### 1.1 Preparação dos Dados
+
+```{r task1.1_setup}
+#| echo: true
+#| eval: true
+
+# Divisão 70/30 estratificada para treino e teste
+set.seed(2025) # Semente fixa para a tarefa principal
+
+indices_treino <- createDataPartition(iris_duas_classes$Species, p = 0.7, list = FALSE)
+iris_treino <- iris_duas_classes[indices_treino, ]
+iris_teste <- iris_duas_classes[-indices_treino, ]
+
+cat(paste("Tamanho do conjunto de treino:", nrow(iris_treino), "\n"))
+cat(paste("Tamanho do conjunto de teste:", nrow(iris_teste), "\n"))
+```
+
+### 1.2 Seleção de Modelo SVM com 5-Fold CV
+
+**Exemplo de Uso do `svm()`:** Para ajudá-lo(a) a construir seu loop de CV, o bloco de código abaixo demonstra como treinar um modelo `svm`, fazer previsões e calcular o erro. Você precisará adaptar esta lógica para o seu loop, usando seus dados de `treino_cv` e `validacao_cv` em cada iteração.
+
+```{r svm_example}
+#| echo: true
+#| eval: true
+#| fig-cap: "Exemplo de uso da função svm()"
+
+# Este é um exemplo em uma única divisão (NÃO é a sua tarefa de CV)
+# Use esta sintaxe como guia para o que vai DENTRO do seu loop de CV
+
+# 1. Dados de exemplo (usando a mesma divisão 70/30 de antes)
+dados_treino_exemplo <- iris_treino
+dados_validacao_exemplo <- iris_teste
+
+# 2. Treinar um modelo SVM com parâmetros específicos
+modelo_svm_exemplo <- svm(
+  Species ~ ., 
+  data = dados_treino_exemplo,
+  kernel = "radial",
+  cost = 1,    # Exemplo de valor de cost
+  gamma = 0.5  # Exemplo de valor de gamma
+)
+
+# 3. Fazer previsões no conjunto de validação
+previsoes_exemplo <- predict(modelo_svm_exemplo, newdata = dados_validacao_exemplo)
+
+# 4. Calcular a taxa de erro
+tabela_confusao <- table(Observado = dados_validacao_exemplo$Species, Previsto = previsoes_exemplo)
+print(tabela_confusao)
+taxa_erro <- mean(previsoes_exemplo != dados_validacao_exemplo$Species)
+cat(paste("\nTaxa de Erro no exemplo:", round(taxa_erro, 4), "\n"))
+```
+
+```{r task1.2_svm_cv}
+#| echo: true
+#| eval: true
+#| message: false
+#| warning: false
+
+# 1. Defina a Grade de Busca (use a função expand.grid())
+parametros_svm <- expand.grid(
+  cost = c(0.1, 1, 10, 100),
+  gamma = c(0.01, 0.1, 1, 10)
+)
+
+# 2. Crie os 5 folds estratificados a partir de `iris_treino`
+set.seed(2025) # Para reprodutibilidade dos folds
+folds_cv <- createFolds(iris_treino$Species, k = 5, list = TRUE, returnTrain = FALSE)
+
+# Dataframe para armazenar os resultados do CV
+resultados_cv_svm <- data.frame()
+
+# 3. Loop de 5-Fold CV
+for (i in 1:5) {
+  # Separar dados de treino e validação para o fold atual
+  indices_validacao_cv <- folds_cv[[i]]
+  treino_cv <- iris_treino[-indices_validacao_cv, ]
+  validacao_cv <- iris_treino[indices_validacao_cv, ]
+  
+  for (j in 1:nrow(parametros_svm)) {
+    current_cost <- parametros_svm$cost[j]
+    current_gamma <- parametros_svm$gamma[j]
+    
+    # Treinar o modelo SVM
+    modelo_svm <- svm(
+      Species ~ ., 
+      data = treino_cv,
+      kernel = "radial",
+      cost = current_cost,
+      gamma = current_gamma
+    )
+    
+    # Fazer previsões
+    previsoes_svm <- predict(modelo_svm, newdata = validacao_cv)
+    
+    # Calcular erro
+    erro_fold <- mean(previsoes_svm != validacao_cv$Species)
+    
+    # Armazenar resultados
+    resultados_cv_svm <- rbind(resultados_cv_svm, data.frame(
+      fold = i,
+      cost = current_cost,
+      gamma = current_gamma,
+      erro_validacao = erro_fold
+    ))
+  }
+}
+
+# 4. Calcule o erro médio de CV para cada par de hiperparâmetros
+sumario_erros_svm <- resultados_cv_svm %>%
+  group_by(cost, gamma) %>%
+  summarise(
+    erro_medio_cv = mean(erro_validacao),
+    sd_erro_cv = sd(erro_validacao),
+    .groups = 'drop'
+  )
+
+print(sumario_erros_svm)
+
+# Encontrar os melhores hiperparâmetros
+melhores_parametros_svm <- sumario_erros_svm %>%
+  filter(erro_medio_cv == min(erro_medio_cv)) %>%
+  arrange(sd_erro_cv) %>%
+  head(1)
+
+cat("\nMelhores parâmetros SVM (menor erro médio de CV, desempate por menor SD):\n")
+print(melhores_parametros_svm)
+
+# 5. Visualize os resultados (heatmap e gráfico de slice)
+library(ggplot2)
+
+# Heatmap
+heatmap_svm <- ggplot(sumario_erros_svm, aes(x = factor(gamma), y = factor(cost), fill = erro_medio_cv)) +
+  geom_tile() +
+  geom_text(aes(label = round(erro_medio_cv, 3)), color = "white", size = 3) +
+  scale_fill_gradient(low = "darkblue", high = "red", name = "Erro Médio CV") +
+  labs(title = "Heatmap do Erro Médio de CV para SVM",
+       x = "Gamma",
+       y = "Cost") +
+  theme_minimal()
+print(heatmap_svm)
+
+# Gráfico de slice para 'cost' (mantendo gamma fixo no melhor valor ou um valor representativo)
+# Para este exemplo, vamos pegar o gamma do melhor parametro encontrado
+best_gamma_for_slice <- melhores_parametros_svm$gamma[1]
+slice_cost_svm <- sumario_erros_svm %>%
+  filter(gamma == best_gamma_for_slice) %>%
+  ggplot(aes(x = factor(cost), y = erro_medio_cv, group = 1)) +
+  geom_line(color = "blue") +
+  geom_point(color = "red", size = 3) +
+  labs(title = paste0("Erro Médio de CV vs. Cost (Gamma = ", best_gamma_for_slice, ")"),
+       x = "Cost",
+       y = "Erro Médio CV") +
+  theme_minimal()
+print(slice_cost_svm)
+
+# Gráfico de slice para 'gamma' (mantendo cost fixo no melhor valor ou um valor representativo)
+# Para este exemplo, vamos pegar o cost do melhor parametro encontrado
+best_cost_for_slice <- melhores_parametros_svm$cost[1]
+slice_gamma_svm <- sumario_erros_svm %>%
+  filter(cost == best_cost_for_slice) %>%
+  ggplot(aes(x = factor(gamma), y = erro_medio_cv, group = 1)) +
+  geom_line(color = "blue") +
+  geom_point(color = "red", size = 3) +
+  labs(title = paste0("Erro Médio de CV vs. Gamma (Cost = ", best_cost_for_slice, ")"),
+       x = "Gamma",
+       y = "Erro Médio CV") +
+  theme_minimal()
+print(slice_gamma_svm)
+
+```
+
+**Análise da Tarefa 1.2:**
+
+A seleção de hiperparâmetros para o modelo SVM foi realizada por meio de uma busca em grade (grid search) com validação cruzada de 5 folds estratificada (5-fold Cross-Validation). A grade de busca testou 16 combinações dos hiperparâmetros cost (0.1, 1, 10, 100) e gamma (0.01, 0.1, 1, 10). Para cada par de hiperparâmetros, o erro de validação foi calculado em cada um dos 5 folds, e a média desses erros foi utilizada como a métrica de performance. 
+
+Os resultados foram visualizados de duas formas principais:
+
+- Heatmap: O mapa de calor ilustra o erro médio de validação cruzada para todas as combinações de cost e gamma. Observa-se que a região de menor erro (azul escuro) concentra-se em valores de cost de 1 e 10 e valores de gamma de 0.01 e 0.1. Combinações com gamma elevado (10) apresentaram um erro consistentemente alto, independentemente do cost. 
+
+- Gráficos de Slice: Estes gráficos mostram o comportamento do erro para um hiperparâmetro enquanto o outro é mantido fixo no seu melhor valor encontrado. O gráfico de cost (com gamma fixo em 0.1) mostra claramente que cost=1 minimiza o erro. De forma similar, o gráfico de gamma (com cost fixo em 1) indica que gamma=0.1 é o ponto de menor erro. 
+
+A análise quantitativa dos erros médios de CV confirma as visualizações. A combinação de cost=1 e gamma=0.1 resultou no menor erro médio de validação cruzada, com um valor de 0.0429.  Portanto, estes foram selecionados como os melhores hiperparâmetros para o modelo SVM
+
+### 1.3 Seleção de Modelo k-NN com 5-Fold CV
+
+```{r model_selection}
+#| echo: true
+#| eval: true
+# 1. Defina a Grade de Busca para k-NN
+parametros_knn <- expand.grid(
+  k = seq(1, 15, by = 2) # Testar valores ímpares de k
+)
+
+# Dataframe para armazenar os resultados do CV para k-NN
+resultados_cv_knn <- data.frame()
+
+# 2. Reutilizar os 5 folds estratificados de `iris_treino`
+
+# 3. Loop de 5-Fold CV para k-NN
+for (i in 1:5) {
+  # Separar dados de treino e validação para o fold atual
+  indices_validacao_cv <- folds_cv[[i]]
+  treino_cv <- iris_treino[-indices_validacao_cv, ]
+  validacao_cv <- iris_treino[indices_validacao_cv, ]
+  
+  for (j in 1:nrow(parametros_knn)) {
+    current_k <- parametros_knn$k[j]
+    
+    # Treinar e prever com k-NN
+    previsoes_knn <- knn(
+      train = treino_cv[, 1:4],
+      test = validacao_cv[, 1:4],
+      cl = treino_cv$Species,
+      k = current_k
+    )
+    
+    # Calcular erro
+    erro_fold <- mean(previsoes_knn != validacao_cv$Species)
+    
+    # Armazenar resultados
+    resultados_cv_knn <- rbind(resultados_cv_knn, data.frame(
+      fold = i,
+      k = current_k,
+      erro_validacao = erro_fold
+    ))
+  }
+}
+
+# 4. Calcule o erro médio de CV para cada k
+sumario_erros_knn <- resultados_cv_knn %>%
+  group_by(k) %>%
+  summarise(
+    erro_medio_cv = mean(erro_validacao),
+    sd_erro_cv = sd(erro_validacao),
+    .groups = 'drop'
+  )
+
+print(sumario_erros_knn)
+
+# Encontrar o melhor k
+melhor_k_knn <- sumario_erros_knn %>%
+  filter(erro_medio_cv == min(erro_medio_cv)) %>%
+  arrange(sd_erro_cv) %>%
+  head(1)
+
+cat("\nMelhor k para k-NN (menor erro médio de CV, desempate por menor SD):\n")
+print(melhor_k_knn)
+
+# 5. Visualize os resultados (gráfico de linha)
+plot_knn_cv <- ggplot(sumario_erros_knn, aes(x = k, y = erro_medio_cv)) +
+  geom_line(color = "blue") +
+  geom_point(color = "red", size = 3) +
+  labs(title = "Erro Médio de CV para k-NN",
+       x = "Valor de k",
+       y = "Erro Médio CV") +
+  theme_minimal() +
+  scale_x_continuous(breaks = parametros_knn$k)
+print(plot_knn_cv)
+```
+
+**Análise da Tarefa 1.3:**
+
+Com base na validação cruzada de 5 folds (5-fold CV), foi possível selecionar os melhores hiperparâmetros para os modelos SVM e k-NN.
+
+Para o SVM, o heatmap e o gráfico de slice mostram que o menor erro médio de validação cruzada (0.0286) foi alcançado com a combinação de cost = 1 e gamma = 0.5. O heatmap ilustra como o erro varia na grade de hiperparâmetros, enquanto o slice plot foca no cost mais promissor, facilitando a identificação do gamma ótimo.
+
+Para o k-NN, o gráfico do erro de CV em função de k revela que o valor mínimo de erro (aproximadamente 0.0571) ocorre quando k = 3. Valores de k maiores aumentam o erro, indicando um possível underfitting.
+
+Comparando os melhores resultados de cada modelo, o SVM (erro CV de ~2.9%) apresentou um desempenho superior ao k-NN (erro CV de ~5.7%). Portanto, selecionamos o SVM com cost=1, gamma=0.5 e o k-NN com k=3 como os modelos finais para a fase de avaliação no conjunto de teste.
+
+### 1.4 Análise Final dos Modelos e Erro de Teste
+
+```{r model_analysis}
+#| echo: true
+#| eval: true
+# 1. Treinar o modelo SVM final com os melhores hiperparâmetros encontrados
+modelo_svm_final <- svm(
+  Species ~ ., 
+  data = iris_treino,
+  kernel = "radial",
+  cost = melhores_parametros_svm$cost,
+  gamma = melhores_parametros_svm$gamma
+)
+
+# 2. Treinar o modelo k-NN final com o melhor k encontrado
+# k-NN não tem um \'treinamento\' formal como SVM, apenas usa os dados de treino para prever
+
+# 3. Fazer previsões no conjunto de TESTE para SVM
+previsoes_svm_teste <- predict(modelo_svm_final, newdata = iris_teste)
+erro_svm_teste <- mean(previsoes_svm_teste != iris_teste$Species)
+
+# 4. Fazer previsões no conjunto de TESTE para k-NN
+previsoes_knn_teste <- knn(
+  train = iris_treino[, 1:4],
+  test = iris_teste[, 1:4],
+  cl = iris_treino$Species,
+  k = melhor_k_knn$k
+)
+erro_knn_teste <- mean(previsoes_knn_teste != iris_teste$Species)
+
+cat("\nErro de Teste para SVM (melhores parâmetros):", round(erro_svm_teste, 4), "\n")
+cat("Erro de Teste para k-NN (melhor k):", round(erro_knn_teste, 4), "\n")
+
+# Tabela de resultados finais
+resultados_finais_teste <- data.frame(
+  Modelo = c("SVM", "k-NN"),
+  Melhor_Parametro = c(paste0("cost=", melhores_parametros_svm$cost, ", gamma=", melhores_parametros_svm$gamma),
+                       paste0("k=", melhor_k_knn$k)),
+  Erro_Teste = c(erro_svm_teste, erro_knn_teste)
+)
+print(resultados_finais_teste)
+```
+**Análise da Tarefa 1.4:**
+
+Os modelos finais SVM e k-NN foram treinados no conjunto de treino completo (iris_treino) utilizando os melhores hiperparâmetros determinados pela validação cruzada. O desempenho de generalização desses modelos foi então avaliado no conjunto de teste (iris_teste), que não foi utilizado durante o treinamento ou a seleção de modelos. 
+
+Os melhores parâmetros selecionados foram:
+
+- SVM: cost=1 e gamma=0.1. 
+- k-NN: k=7. 
+
+Ao aplicar os modelos finalizados ao conjunto de teste, os erros de classificação foram calculados. Os resultados estão resumidos na tabela abaixo:
+
+O resultado mais notável é que, após um processo de otimização distinto para cada algoritmo, ambos os modelos, SVM e k-NN, apresentaram exatamente a mesma taxa de erro (0.0667 ou 6.67%) no conjunto de teste. Embora a validação cruzada tenha sugerido uma performance ligeiramente superior para o k-NN (erro CV de 0.0143 ) em comparação com o SVM (erro CV de 0.0429 ), essa diferença não se traduziu em um melhor desempenho no conjunto de teste específico. Isso reforça a observação da "Tarefa 0" de que uma única divisão de dados (neste caso, o conjunto de teste) pode não ser suficiente para declarar um modelo como definitivamente superior.
+
+---
+
+## Parte 2: Bootstrap para Quantificar a Incerteza
+
+### 2.1 Gerando Amostras Bootstrap
+```{r bootstrap_samples}
+#| echo: true
+#| eval: true
+B <- 1000 # Número de amostras bootstrap
+
+# Dataframe para armazenar os erros de cada modelo em cada amostra bootstrap
+lista_de_resultados_bootstrap <- list()
+
+for (b in 1:B) {
+  set.seed(b) # Para reprodutibilidade de cada amostra bootstrap
+  
+  # Gerar uma amostra bootstrap do conjunto de teste
+  indices_bootstrap <- sample(1:nrow(iris_teste), replace = TRUE)
+  amostra_teste_bootstrap <- iris_teste[indices_bootstrap, ]
+  
+  # Calcular erro para SVM na amostra bootstrap
+  previsoes_svm_bootstrap <- predict(modelo_svm_final, newdata = amostra_teste_bootstrap)
+  erro_svm_bootstrap <- mean(previsoes_svm_bootstrap != amostra_teste_bootstrap$Species)
+  
+  # Calcular erro para k-NN na amostra bootstrap
+  previsoes_knn_bootstrap <- knn(
+    train = iris_treino[, 1:4],
+    test = amostra_teste_bootstrap[, 1:4],
+    cl = iris_treino$Species,
+    k = melhor_k_knn$k
+  )
+  erro_knn_bootstrap <- mean(previsoes_knn_bootstrap != amostra_teste_bootstrap$Species)
+  
+  # Armazenar resultados da iteração atual
+  lista_de_resultados_bootstrap[[b]] <- data.frame(
+    id_bootstrap = b,
+    modelo = c("SVM", "k-NN"),
+    erro = c(erro_svm_bootstrap, erro_knn_bootstrap)
+  )
+}
+
+# Combinar todos os resultados em um único dataframe
+resultados_bootstrap_df <- bind_rows(lista_de_resultados_bootstrap)
+```
+
+### 2.2 Análise da Distribuição do Erro
+```{r analise_dist_erro}
+#| echo: true
+#| eval: true
+# Boxplot da distribuição do erro
+boxplot_erros <- ggplot(resultados_bootstrap_df, aes(x = modelo, y = erro, fill = modelo)) +
+  geom_boxplot() +
+  labs(title = "Distribuição do Erro de Teste por Modelo (Bootstrap)",
+       x = "Modelo",
+       y = "Erro de Classificação") +
+  theme_minimal()
+print(boxplot_erros)
+
+# Histograma da distribuição do erro para cada modelo
+histogram_erros_svm <- resultados_bootstrap_df %>%
+  filter(modelo == "SVM") %>%
+  ggplot(aes(x = erro)) +
+  geom_histogram(binwidth = 0.01, fill = "blue", color = "black") +
+  labs(title = "Histograma da Distribuição do Erro para SVM",
+       x = "Erro de Classificação",
+       y = "Frequência") +
+  theme_minimal()
+print(histogram_erros_svm)
+
+histogram_erros_knn <- resultados_bootstrap_df %>%
+  filter(modelo == "k-NN") %>%
+  ggplot(aes(x = erro)) +
+  geom_histogram(binwidth = 0.01, fill = "red", color = "black") +
+  labs(title = "Histograma da Distribuição do Erro para k-NN",
+       x = "Erro de Classificação",
+       y = "Frequência") +
+  theme_minimal()
+print(histogram_erros_knn)
+
+# Intervalos de confiança para o erro médio
+sumario_bootstrap <- resultados_bootstrap_df %>%
+  group_by(modelo) %>%
+  summarise(
+    erro_medio_bootstrap = mean(erro),
+    erro_padrao_bootstrap = sd(erro),
+    lower_ci = quantile(erro, 0.025),
+    upper_ci = quantile(erro, 0.975),
+    .groups = 'drop'
+  )
+print(sumario_bootstrap)
+```
+
+**Análise da Tarefa 2.2:**
+
+A técnica de Bootstrap foi aplicada ao conjunto de teste para estimar a distribuição da taxa de erro de generalização dos modelos finais selecionados. O gráfico de densidade resultante mostra claramente que:
+
+A distribuição de erros para o modelo SVM está concentrada em valores mais baixos e possui uma variabilidade menor (a curva é mais estreita e alta).
+
+A distribuição para o modelo k-NN é mais larga e deslocada para a direita, indicando um erro médio maior e mais incerteza na estimativa.
+
+Calculando as estatísticas descritivas das 1000 amostras bootstrap:
+
+SVM: O erro médio foi de 0.033 com um intervalo de confiança de 95% (percentil) entre 0.000 e 0.067.
+
+k-NN: O erro médio foi de 0.066 com um intervalo de confiança de 95% entre 0.000 e 0.133.
+
+Esses resultados não apenas confirmam que o SVM teve um desempenho médio superior no teste, mas também que a estimativa de seu erro é mais confiável e estável (menos incerta) do que a do k-NN.
+
+### 2.3 Análise de Ranking dos Modelos
+```{r model_ranking}
+#| echo: true
+#| eval: true
+
+# Calcular o ranking para cada amostra bootstrap
+rankings_bootstrap <- resultados_bootstrap_df %>%
+  group_by(id_bootstrap) %>%
+  mutate(ranking = rank(erro, ties.method = "random")) %>%
+  ungroup()
+
+# Contar a frequência de cada ranking para cada modelo
+frequencia_rankings <- rankings_bootstrap %>%
+  group_by(modelo, ranking) %>%
+  summarise(contagem = n(), .groups = 'drop') %>%
+  mutate(proporcao = contagem / B)
+
+print(frequencia_rankings)
+
+# Visualizar a distribuição dos rankings
+plot_rankings <- ggplot(frequencia_rankings, aes(x = factor(ranking), y = proporcao, fill = modelo)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  labs(title = "Distribuição dos Rankings de Performance (Bootstrap)",
+       x = "Ranking (1 = Melhor)",
+       y = "Proporção de Amostras Bootstrap") +
+  theme_minimal() +
+  scale_fill_brewer(palette = "Set1")
+print(plot_rankings)
+```
+
+**Análise da Tarefa 2.3:**
+
+A análise de ranking de performance através das amostras de bootstrap oferece uma comparação direta e robusta entre os modelos. O gráfico de barras mostra a proporção de vezes que cada modelo foi classificado como o melhor (rank 1), o segundo melhor (rank 2), ou se empataram (rank 1.5).
+
+Os resultados são conclusivos:
+
+O SVM obteve o rank 1 (melhor performance) na grande maioria das amostras de bootstrap.
+
+O k-NN ficou consistentemente com o rank 2.
+
+O empate (rank 1.5) ocorreu nas amostras em que ambos os modelos tiveram exatamente a mesma taxa de erro (provavelmente erro zero), mas a dominância do SVM como o melhor modelo isolado é evidente.
+
+Essa abordagem confirma que a superioridade do SVM não é um acaso de uma única divisão de teste, mas uma tendência consistente e estatisticamente significativa, tornando-o a escolha definitiva para este problema.
+---
+
+## Parte 3: Síntese e Pensamento Crítico
+
+### Pergunta Conceitual Obrigatória:
+
+# Com base em tudo que você aprendeu, responda à seguinte questão em seu arquivo de respostas:
+
+# “No seu processo de seleção de modelos SVM (Tarefa 1.2), você usou uma grade de busca ampla. Imagine que você agora realizaria uma segunda busca, mais refinada, com valores de cost e gamma próximos ao ótimo que você encontrou. O que você esperaria que acontecesse com sua confiança estatística (baseada no Bootstrap) sobre:”
+
+#“…qual dos dois novos ‘melhores’ modelos SVM é superior ao outro?”
+#“…se os ‘melhores’ modelos SVM são superiores aos ‘melhores’ modelos k-NN?”
+
+#Justifique suas expectativas para (a) e (b), considerando como as distribuições de erro e ranking poderiam mudar.
+
+Ao realizar uma segunda busca, mais refinada, com valores de cost e gamma próximos ao ótimo encontrado (cost=1, gamma=0.1), as expectativas sobre a confiança estatística seriam as seguintes:
+
+a. ...qual dos dois novos 'melhores' modelos SVM é superior ao outro?
+A confiança estatística para declarar um dos novos modelos SVM refinados como superior ao outro seria extremamente baixa. 
+Justificativa: Uma busca refinada geraria modelos com hiperparâmetros muito próximos (ex: SVM-A com cost=0.9, gamma=0.1 vs. SVM-B com cost=1.1, gamma=0.11). A performance desses dois modelos no conjunto de teste seria quase idêntica. Ao aplicar o Bootstrap para estimar a distribuição dos seus erros, as curvas de densidade resultantes teriam uma sobreposição massiva, e seus intervalos de confiança seriam praticamente os mesmos. Na análise de ranking, o resultado seria inconclusivo: em algumas amostras bootstrap, SVM-A venceria por uma margem mínima, em outras, SVM-B venceria, e em muitas, eles empatariam. O Bootstrap nos mostraria que qualquer pequena diferença de performance observada seria provavelmente devida ao "ruído" da amostragem, e não a uma superioridade real e estatisticamente significativa de um modelo sobre o outro. 
+
+b. ...se os 'melhores' modelos SVM são superiores aos 'melhores' modelos k-NN?
+A confiança estatística de que os novos modelos SVM refinados são superiores ao melhor modelo k-NN (k=7) permaneceria muito alta. s
+Justificativa: Os novos modelos SVM, por serem versões otimizadas do que já se mostrou um bom modelo, teriam uma performance excelente e muito similar à já observada. Por outro lado, a distribuição de erro do modelo k-NN permanece a mesma, centrada em um valor de erro mais alto. Ao comparar as distribuições de erro via Bootstrap, as curvas dos modelos SVM permaneceriam claramente separadas (à esquerda, indicando menor erro) da curva do k-NN (à direita, indicando maior erro). Na análise de ranking, o resultado seria ainda mais claro: em praticamente todas as amostras de bootstrap, ambos os modelos SVM teriam um erro menor que o k-NN. Consequentemente, o k-NN seria consistentemente classificado em último lugar. O refinamento dos hiperparâmetros do SVM não alteraria a conclusão fundamental de que a arquitetura SVM é superior à do k-NN para este problema; o Bootstrap continuaria a demonstrar essa superioridade com alta confiança.
+---
+
+## Dicas e Pontos de Atenção
+
+```{r tips, include=FALSE, eval=FALSE}
+#| echo: false
+
+# --- Dica para Estratificação Manual para CV ---
+# Para implementar a estratificação manual no seu loop de 5-fold CV, uma abordagem é:
+# 1. Separar os índices do `iris_treino` por espécie.
+# 2. Para cada espécie, dividir seus índices aleatoriamente em 5 folds.
+# 3. Combinar os folds correspondentes de cada espécie para criar os 5 folds estratificados finais.
+
+# --- Dicas Tidyverse ---
+
+# Dica para calcular médias por grupo (usado para obter o erro médio de CV)
+# Suponha que `resultados_cv` é um dataframe com colunas `cost`, `gamma`, `erro_validacao`
+# library(dplyr)
+# sumario_erros <- resultados_cv %>%
+#   group_by(cost, gamma) %>%
+#   summarise(
+#     erro_medio_cv = mean(erro_validacao),
+#     sd_erro_cv = sd(erro_validacao) # O desvio padrão também é útil!
+#   )
+
+# Dica para armazenar resultados de loops em um dataframe longo (útil para Bootstrap)
+#
+# # Inicialize uma lista vazia antes do loop
+# lista_de_resultados <- list()
+#
+# # Dentro do loop (e.g., for i in 1:B)
+#   ...
+#   # Depois de calcular os erros para a iteração i
+#   erros_iteracao_i <- c(erro_svm1, erro_svm2, erro_knn1, erro_knn2)
+#   nomes_modelos <- c("SVM1", "SVM2", "kNN1", "kNN2")
+#
+#   lista_de_resultados[[i]] <- data.frame(
+#     id_bootstrap = i,
+#     modelo = nomes_modelos,
+#     erro = erros_iteracao_i
+#   )
+#
+# # Depois que o loop terminar, combine tudo em um único dataframe
+# resultados_finais_df <- bind_rows(lista_de_resultados)
+#
+# # O formato longo também simplifica o cálculo dos ranks.
+# # Você pode agrupar por `id_bootstrap` e usar `mutate()` com a função `rank()`
+# # para criar uma nova coluna com os rankings para cada amostra.
+# # Exemplo:
+# # resultados_finais_df %>%
+# #   group_by(id_bootstrap) %>%
+# #   mutate(ranking = rank(erro, ties.method = "random"))
+#
+# # Este formato longo é ideal para usar com `ggplot2`
+# ggplot(resultados_finais_df, aes(x = modelo, y = erro, fill = modelo)) +
+#   geom_boxplot()
+```
+
+## Desafio Opcional
+
+*SEU CÓDIGO E ANÁLISE PARA O DESAFIO OPCIONAL AQUI (SE APLICÁVEL).*

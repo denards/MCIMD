@@ -1,0 +1,180 @@
+---
+title: "PPCA0026 - Tarefa de Casa: Simulação, Poder e Decisão"
+subtitle: "Aplicando os Conceitos da Semana 4"
+author: "SEU NOME COMPLETO AQUI"
+date: "2025-07-04"
+format:
+  html:
+    embed-resources: true
+    toc: true
+    toc-depth: 3
+    theme: cosmo
+    code-fold: show
+    code-tools: true
+---
+
+## Introdução
+
+Nesta tarefa, você aplicará os conceitos de simulação para entender as propriedades de testes estatísticos, implementará um teste não-paramétrico do zero, e aplicará um framework de teoria da decisão para analisar um problema de classificação.
+
+**Instruções Gerais:**
+
+* Este arquivo serve como seu template de resposta. Preencha as seções marcadas com seu código R, as saídas geradas, e suas análises textuais.
+* **Entrega:** Envie dois arquivos: este `.qmd` completo e o arquivo `.html` auto-contido resultante.
+
+---
+
+## Problema 1: O Poder de um Teste - Um Estudo de Simulação
+
+### Parte A: Poder vs. Tamanho do Efeito
+
+```{r prob1a_power_function}
+# Carregar pacotes necessários para a tarefa
+library(tidyverse)
+library(caret) # Para createDataPartition, se necessário
+library(ISLR2) # Para o dataset Default
+
+# 1. Crie sua função `calcular_poder` aqui.
+calcular_poder <- function(n, d, sigma, num_sim = 1000, alpha = 0.05) {
+  # ... seu código aqui ...
+}
+```
+
+```{r prob1a_run_and_plot}
+# 2. Defina os parâmetros e calcule o poder para cada tamanho de efeito
+n_fixo <- 30
+sigma_fixo <- 1
+efeitos_d <- seq(0, 2, by = 0.1)
+
+# ... seu código aqui ...
+
+# 3. Crie o gráfico de Poder vs. Tamanho do Efeito
+# ... seu código ggplot2 aqui ...
+```
+
+**Análise da Parte A:**
+
+*SUA ANÁLISE AQUI:*
+
+### Parte B: Poder vs. Tamanho da Amostra
+
+```{r prob1b_run_and_plot}
+# 1. Defina os parâmetros
+d_fixo <- 0.5
+sigma_fixo <- 1
+amostras_n <- seq(10, 200, by = 10)
+
+# Calcule os poderes para cada tamanho de amostra
+# ... seu código aqui ...
+
+# 2. Crie o gráfico de Poder vs. Tamanho da Amostra
+# ... seu código ggplot2 aqui ...
+```
+
+**Análise da Parte B:**
+
+*SUA ANÁLISE AQUI:*
+
+---
+
+## Problema 2: Teste de Permutação para Correlação
+
+### Parte A: Teste Clássico
+
+```{r prob2a_classical_test}
+# ... seu código aqui ...
+```
+
+**Análise da Parte A:**
+
+*REPORTE SEUS RESULTADOS AQUI:*
+
+### Parte B e C: Teste de Permutação e Análise
+
+```{r prob2c_solution}
+# 1. Calcule a correlação observada
+# ...
+
+# 2. Implemente o loop de permutação
+# ...
+
+# 3. Visualize a distribuição nula e calcule o p-valor
+# ...
+```
+
+**Análise da Parte C:**
+
+*SUA ANÁLISE AQUI:*
+
+---
+
+## Problema 3: Análise de Sensibilidade e Decisões Ótimas
+
+### Parte A: Análise de Sensibilidade Teórica
+
+```{r prob3a_sensitivity_analysis}
+# Cenário: C_I = 1,000,000; C_II = 5,000,000
+# Você precisará da sua função `calcular_poder` do Problema 1.
+
+# 1. Defina os tamanhos de efeito e outros parâmetros
+efeitos <- c(pequeno = 0.2, medio = 0.5, grande = 1.0)
+n_fixo_prob3 <- 60 # Tamanho de amostra especificado
+sigma_fixo_prob3 <- 1
+
+# 2. Simule para encontrar o alpha ótimo para cada tamanho de efeito
+# ... seu código aqui ...
+```
+
+**Análise da Parte A:**
+
+*SUA ANÁLISE E TABELA AQUI:*
+
+### Parte B: Análise de Sensibilidade em um Contexto de Machine Learning
+
+```{r prob3b_setup}
+# 1. Carregue e divida os dados
+set.seed(2024)
+# ... seu código para dividir o dataset Default em treino (70%) e validação (30%) ...
+# ... seu código para treinar o modelo de regressão logística ...
+# Treinar o modelo
+# modelo_logistico <- glm(default ~ student + balance + income, data = treino, family = "binomial")
+```
+
+```{r prob3b_analysis}
+# 2. Identifique os subgrupos no conjunto de validação
+# ...
+
+# 3. Avaliar desempenho geral
+# prob_geral <- predict(modelo_logistico, newdata = validacao, type = "response")
+# Classificar os dados usando um ponto de corte igual a 0.5 (para simplificar)
+# pred_geral <- ifelse(prob_geral > 0.5, "Yes", "No")
+# Gerar a matriz de confusão geral (Confusion Matrix, cm)
+# cm_geral <- table(Observado = validacao$default, Previsto = pred_geral)
+
+# 4. Realize a Análise de Sensibilidade
+# Criar a matriz de Confusão dos Estudantes
+# ...
+# Criar a matriz de Confusão dos Não-Estudantes
+# ...
+
+# 4.5
+# Função para calcular o custo a partir da matriz de confusão
+# ...
+
+# Custo Geral
+# ...
+
+# Custo Estudantes
+# ...
+
+# Custo Não-Estudantes
+# ...
+
+# 5. ATUALIZAÇÃO: Calcule o custo médio por pessoa para cada grupo
+# custo_medio_estudantes <- custo_total_estudantes / n_estudantes
+# ...
+```
+
+**Análise e Recomendação da Parte B:**
+
+*SUA ANÁLISE E RECOMENDAÇÃO AQUI:* Compare os custos médios por pessoa. Com base nesta análise normalizada, qual é a sua recomendação final?
